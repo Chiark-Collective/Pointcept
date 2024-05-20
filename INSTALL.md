@@ -31,7 +31,7 @@ https://connecthkuhk-my.sharepoint.com/:u:/g/personal/wuxy_connect_hku_hk/ERtd0Q
 OR just aligned (and/or raw):
 https://cvg-data.inf.ethz.ch/s3dis/
 
-I unzipped em in ./data/s3dis
+I unzipped em to `./data/s3dis`
 
 ## ScanNet v2
 
@@ -41,14 +41,14 @@ https://connecthkuhk-my.sharepoint.com/:u:/g/personal/wuxy_connect_hku_hk/EREuB1
 OR raw:
 http://www.scan-net.org/
 
-Unzipped in ./data/scannet
+Unzipped to `./data/scannet`.
 
 
 # Test the PTV3 model on ScanNet
 
 # test
 ```sh
-poetry run python tools/test.py --config-file ${PTV3_CONFIG_PATH} --options save_path=${PTV3_SAVE_PATH} weight=${PTV3_WEIGHTS_PATH}
+make test-ptv3
 ```
 
 # refs
