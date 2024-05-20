@@ -16,9 +16,12 @@ try:
     import ocnn
     from ocnn.octree import Octree, Points
 except ImportError:
+    from pointcept.utils.misc import DummyClass
     ocnn = None
-    Octree = None
-    Points = None
+    # Octree = None
+    # Points = None
+    Octree = DummyClass
+    Points = DummyClass
 
 try:
     import dwconv

@@ -1,0 +1,3 @@
+[submodule "models/PointTransformerV3"]
+	path = models/PointTransformerV3
+	url = git@hf.co:Pointcept/PointTransformerV3
