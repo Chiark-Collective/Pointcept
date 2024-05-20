@@ -119,6 +119,25 @@ If you find _Pointcept_ useful to your research, please cite our work as encoura
 
 ## Installation
 
+### **Fork-specific instructions (assuming python 3.11, CUDA 12.1+, poetry and docker installed):** 
+
+TL;DR: install everything and download point transformer v3 weights:
+
+```sh
+make install
+make ptv3
+```
+
+Download the datasets and unzip them in `/data`.
+
+Test the install of library + PTv3:
+
+```sh
+make test-ptv3
+```
+
+For full details see [INSTALL.md](/INSTALL.md).
+
 ### Requirements
 - Ubuntu: 18.04 and above.
 - CUDA: 11.3 and above.
