@@ -2,7 +2,7 @@ weight = './models/PointTransformerV3/scannet-semseg-pt-v3m1-1-ppt-extreme/model
 resume = False
 evaluate = True
 test_only = False
-seed = 48592136
+seed = 44350923
 save_path = './exp/scannet/semseg-pt-v3m1-1-ppt-extreme'
 num_worker = 48
 batch_size = 24
@@ -149,7 +149,7 @@ data = dict(
                         mode='train',
                         return_grid_coord=True),
                     dict(type='SphereCrop', sample_rate=0.8, mode='random'),
-                    dict(type='SphereCrop', point_max=204800, mode='random'),
+                    dict(type='SphereCrop', point_max=102400, mode='random'),
                     dict(type='CenterShift', apply_z=False),
                     dict(type='NormalizeColor'),
                     dict(type='Add', keys_dict=dict(condition='Structured3D')),
@@ -204,7 +204,7 @@ data = dict(
                         hash_type='fnv',
                         mode='train',
                         return_grid_coord=True),
-                    dict(type='SphereCrop', point_max=204800, mode='random'),
+                    dict(type='SphereCrop', point_max=102400, mode='random'),
                     dict(type='CenterShift', apply_z=False),
                     dict(type='NormalizeColor'),
                     dict(type='ShufflePoint'),
