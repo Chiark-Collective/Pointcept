@@ -2374,6 +2374,27 @@ nearley = ["js2py"]
 regex = ["regex"]
 
 [[package]]
+name = "laspy"
+version = "2.5.3"
+description = "Native Python ASPRS LAS read/write library"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "laspy-2.5.3.tar.gz", hash = "sha256:4ad698914358ea5a096da52e69bceccd320d9ddfb367480a5c2b5e086db812b7"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[package.extras]
+cli = ["rich (>=10.11.0)", "typer[all] (>=0.8.0)"]
+dev = ["black (==22.3.0)", "coverage", "isort (==5.11.5)", "m2r2", "nox", "pytest", "pytest-benchmark", "rangehttpserver", "sphinx", "sphinx-rtd-theme"]
+laszip = ["laszip (>=0.2.1,<0.3.0)"]
+lazrs = ["lazrs (>=0.5.0,<0.6.0)"]
+pyproj = ["pyproj"]
+requests = ["requests"]
+
+[[package]]
 name = "lesscpy"
 version = "0.15.1"
 description = "Python LESS compiler"
@@ -6030,4 +6051,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "49822ef3a04592bd53677718df1e8ed70fe82a40a3b85368937ea8551d69d6a1"
+content-hash = "89906080a7868576f9820b49bfea7bdd6b8b7f6523de1cc0b22249d95dfd21ab"
