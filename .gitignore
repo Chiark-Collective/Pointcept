@@ -14,3 +14,5 @@ outputs/
 */.DS_Store
 **/*.out
 .cache
+result
+_poetry.lock
