@@ -16,3 +16,4 @@ outputs/
 .cache
 result
 _poetry.lock
+notebooks/.ipynb_checkpoints
