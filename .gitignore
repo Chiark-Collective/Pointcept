@@ -17,3 +17,5 @@ outputs/
 result
 _poetry.lock
 notebooks/.ipynb_checkpoints
+notebooks/*.pth
+notebooks/output_voxels
