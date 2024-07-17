@@ -1,0 +1,103 @@
+####################################################################################
+# This Dockerfile first establishes a common base target, then uses
+# it for:
+#   1. An environment for compiling the pointops and pointgroup_ops wheels.
+#   2. A production environment for running Pointcept.
+
+####################################################################################
+### Start from a CUDA 12.1 base image
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 as pointcept-base
+ENV PYENV_ROOT=/usr/local/.pyenv \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_DEFAULT_TIMEOUT=100 \
+    DEBIAN_FRONTEND=noninteractive \ 
+    PYTHON_VERSION=3.11.8 \
+    WORKDIR=/usr/app \
+    TORCH_CUDA_ARCH_LIST=8.9
+WORKDIR $WORKDIR
+
+### System dependencies via apt.
+RUN apt-get update \ 
+    && apt-get install -y gcc curl make build-essential git \
+    libssl-dev zlib1g-dev libsparsehash-dev \
+    libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+    libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
+    && apt-get clean
+
+### Python configuration
+# Set-up necessary env vars for PyEnv
+ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+# Install and configure pyenv
+RUN set -ex \
+    && curl https://pyenv.run | bash \
+    && pyenv update \
+    && pyenv install $PYTHON_VERSION \
+    && pyenv global $PYTHON_VERSION \
+    && pyenv rehash
+RUN pip install --upgrade pip
+
+####################################################################################
+### Now the target to compile the necessary binaries
+FROM pointcept-base as pointcept-builder
+
+# Install PyTorch 2.2.0 with CUDA 12.1 support
+# Adjust this line if the exact version for CUDA 12.1 is different or not available.
+RUN pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu121
+RUN pip install wheel
+# Copy the pointops directory contents into the container at /app
+COPY ./libs/pointops /app/pointops
+COPY ./libs/pointgroup_ops /app/pointgroup_ops
+
+# Set the directory for the pointops to be the working directory
+WORKDIR /app
+
+# Run setup.py to build the wheels
+RUN cd pointops && TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel 2>&1 | tee /app/build_pointops.log && ls /app/pointops/dist && cd ..
+RUN cd pointgroup_ops && TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel 2>&1 | tee /app/build_pointgroup_ops.log && ls /app/pointgroup_ops/dist && cd ..
+
+# copy wheels to wheels directory
+RUN mkdir -p /app/wheels
+RUN cp /app/pointops/dist/* /app/wheels
+RUN cp /app/pointgroup_ops/dist/* /app/wheels
+# RUN mkdir -p /app/wheels_out
+
+# # Define a command that does nothing; we use the container for building only
+# CMD ["echo", "Build complete; wheel files are in the mounted volume."]
+
+####################################################################################
+### A minimalist env to build a wheel for shared-array
+FROM python:3.11 as build-shared-array
+WORKDIR /usr/src/app
+RUN pip install --upgrade pip
+RUN pip install "numpy~=1.0"
+RUN git clone https://gitlab.com/tenzing/shared-array.git
+RUN cd shared-array && python setup.py bdist_wheel
+
+####################################################################################
+### Now the production environment
+FROM pointcept-base as pointcept-env
+WORKDIR $WORKDIR
+
+# Copy the wheels from the build images
+RUN mkdir -p /usr/app/wheels
+COPY --from=pointcept-builder /app/wheels/* /usr/app/wheels/
+COPY --from=build-shared-array /usr/src/app/shared-array/dist/SharedArray-3.2.3-cp311-cp311-linux_x86_64.whl /usr/app/wheels/
+
+# Now configure the python environment with Poetry
+ENV POETRY_HOME /opt/poetry
+ENV PATH $POETRY_HOME/bin:$PATH
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# cache python requirements in docker layer
+COPY pyproject.toml ./
+
+RUN poetry config virtualenvs.create false
+RUN poetry lock --no-update
+RUN poetry install $(test "$YOUR_ENV" == production && echo "--no-dev") --no-interaction --no-ansi
+# RUN poetry install
+
