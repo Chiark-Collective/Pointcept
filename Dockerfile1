@@ -94,10 +94,10 @@ ENV PATH $POETRY_HOME/bin:$PATH
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # cache python requirements in docker layer
-COPY pyproject.toml ./
+COPY . .
 
 RUN poetry config virtualenvs.create false
-RUN poetry lock --no-update
+# RUN poetry lock --no-update
 RUN poetry install $(test "$YOUR_ENV" == production && echo "--no-dev") --no-interaction --no-ansi
 # RUN poetry install
 
