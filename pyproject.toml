@@ -1,3 +1,7 @@
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
+
 [tool.poetry]
 name = "pointcept"
 version = "0.1.0"
@@ -11,7 +15,8 @@ jl = "jupyter lab --no-browser --allow-root --ip 0.0.0.0 --port 8888"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-numpy = "^1.26"
+# numpy = "^1.26"
+numpy = "*"
 torch = "^2.2"
 torchvision = "^0.17"
 torchaudio = "^2.2"
@@ -22,7 +27,7 @@ pyarrow = "*"
 xarray = "*"
 open3d = "*"
 addict = "*"
-Pillow = "*"
+Pillow = "*" 
 dask = "*"
 scikit-learn = "^1.2.2"
 # pointcept = "*"
@@ -62,9 +67,12 @@ torch_cluster = {url = "https://data.pyg.org/whl/torch-2.2.0+cu121/torch_cluster
 torch_spline_conv = {url = "https://data.pyg.org/whl/torch-2.2.0+cu121/torch_spline_conv-1.2.2+pt22cu121-cp311-cp311-linux_x86_64.whl"}
 clip = {git = "https://github.com/openai/CLIP.git"}
 laspy = "*"
-pointops = {path = "./wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"}
-pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"}
-sharedarray = {path = "./wheels/SharedArray-3.2.3-cp311-cp311-linux_x86_64.whl"}
+sharedarray = "3.2.4"
+
+# pointops = {path = "./libs/pointops"}
+# pointgroup_ops = {path = "./libs/pointgroup_ops"}
+# pointops = {path = "./wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"}
+# pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"}
 
 [tool.poetry.dev-dependencies]
 jupyter="*"
@@ -79,17 +87,3 @@ pylint="*"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[[tool.poetry.source]]
-name = "PyPI"
-priority = "default"
-
-# [[tool.poetry.source]]
-# name = "pyg"
-# url = "https://data.pyg.org/whl/torch-2.2.2+cu121.html"
-# priority = "supplemental"
-# default = true
-
-# [[tool.poetry.source]]
-# name = "nvidia"
-# url = "https://pypi.nvidia.com"
-# priority = "supplemental"

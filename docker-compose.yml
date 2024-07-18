@@ -1,0 +1,8 @@
+services:
+  myservice:
+    image: pointcept-env:latest
+    volumes:
+      - /data/sdd/qh:/data
+    ports:
+      - "4000:80"
+    command: tail -f /dev/null

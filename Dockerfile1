@@ -6,7 +6,7 @@
 
 ####################################################################################
 ### Start from a CUDA 12.1 base image
-FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 as pointcept-base
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS pointcept-base
 ENV PYENV_ROOT=/usr/local/.pyenv \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1 \
@@ -43,7 +43,7 @@ RUN pip install --upgrade pip
 
 ####################################################################################
 ### Now the target to compile the necessary binaries
-FROM pointcept-base as pointcept-builder
+FROM pointcept-base AS pointcept-builder
 
 # Install PyTorch 2.2.0 with CUDA 12.1 support
 # Adjust this line if the exact version for CUDA 12.1 is different or not available.
@@ -71,7 +71,7 @@ RUN cp /app/pointgroup_ops/dist/* /app/wheels
 
 ####################################################################################
 ### A minimalist env to build a wheel for shared-array
-FROM python:3.11 as build-shared-array
+FROM python:3.11 AS build-shared-array
 WORKDIR /usr/src/app
 RUN pip install --upgrade pip
 RUN pip install "numpy~=1.0"
@@ -80,7 +80,7 @@ RUN cd shared-array && python setup.py bdist_wheel
 
 ####################################################################################
 ### Now the production environment
-FROM pointcept-base as pointcept-env
+FROM pointcept-base AS pointcept-env
 WORKDIR $WORKDIR
 
 # Copy the wheels from the build images
@@ -93,11 +93,21 @@ ENV POETRY_HOME /opt/poetry
 ENV PATH $POETRY_HOME/bin:$PATH
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
-# cache python requirements in docker layer
+# Copy pointcept project code
 COPY . .
 
+# Install pointcept python env to container base environment via poetry
 RUN poetry config virtualenvs.create false
 # RUN poetry lock --no-update
-RUN poetry install $(test "$YOUR_ENV" == production && echo "--no-dev") --no-interaction --no-ansi
-# RUN poetry install
+# RUN poetry install $(test "$YOUR_ENV" == production && echo "--no-dev") --no-interaction --no-ansi
+RUN poetry install
 
+# Mount the ssh key
+RUN --mount=type=secret,id=ssh_key \
+    mkdir -p /root/.ssh && \
+    cp /run/secrets/ssh_key /root/.ssh/id_rsa && \
+    chmod 600 /root/.ssh/id_rsa
+
+# Install git lfs
+RUN apt-get install git-lfs
+RUN make ptv3

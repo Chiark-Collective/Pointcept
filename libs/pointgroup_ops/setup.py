@@ -46,6 +46,7 @@ if not (INCLUDE_DIRS is False):
 setup(
     name="pointgroup_ops",
     packages=["pointgroup_ops"],
+    install_requires=["torch", "numpy"],
     package_dir={"pointgroup_ops": "functions"},
     ext_modules=[
         CUDAExtension(
