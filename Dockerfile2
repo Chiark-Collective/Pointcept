@@ -60,12 +60,7 @@ WORKDIR ../..
 RUN pwd
 
 # Now finish installing the development environment and pointcept
-COPY pointcept pointcept
-COPY tools tools
-COPY configs configs
-COPY test test
-COPY Makefile .
-COPY pyproject.toml .
+COPY . .
 RUN poetry install
 
 RUN apt-get install -y git-lfs openssh-client

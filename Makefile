@@ -29,6 +29,11 @@ ptv3:
 	mkdir -p models 
 	cd models && git submodule add git@hf.co:Pointcept/PointTransformerV3
 
+update-ptv3-models:
+	git lfs install
+    mkdir -p models
+	cd models && git submodule update --init
+
 # run the PTv3 test config
 test-ptv3:
 	poetry run python tools/test.py --config-file $(PTV3_CONFIG_PATH) --options save_path=$(PTV3_SAVE_PATH) weight=$(PTV3_WEIGHTS_PATH)
