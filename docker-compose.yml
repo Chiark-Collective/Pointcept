@@ -1,8 +1,13 @@
 services:
-  myservice:
+  pointcept-env:
     image: pointcept-env:latest
     volumes:
       - /data/sdd/qh:/data
+      - ${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent
     ports:
       - "4000:80"
     command: tail -f /dev/null
+    environment:
+      - SSH_AUTH_SOCK=/ssh-agent
+    stdin_open: true
+    tty: true

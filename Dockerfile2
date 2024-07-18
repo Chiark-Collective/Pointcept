@@ -6,7 +6,7 @@
 
 ####################################################################################
 ### Start from a CUDA 12.1 base image
-FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS pointcept-base
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04 AS pointcept-env
 ENV PYENV_ROOT=/usr/local/.pyenv \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1 \
@@ -68,12 +68,4 @@ COPY Makefile .
 COPY pyproject.toml .
 RUN poetry install
 
-# Mount the ssh key
-# RUN --mount=type=secret,id=ssh_key \
-#     mkdir -p /root/.ssh && \
-#     cp /run/secrets/ssh_key /root/.ssh/id_rsa && \
-#     chmod 600 /root/.ssh/id_rsa
-
-# Install git lfs
-# RUN apt-get install git-lfs # THIS IS WRONG
-# RUN make ptv3
+RUN apt-get install -y git-lfs openssh-client
