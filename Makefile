@@ -1,43 +1,51 @@
+################################################################################
 # Variables
-POINTOPS_BUILDER_IMAGE := pointops-builder
-WHEELS_DIR := ./wheels
-POINTOPS_WHEEL := $(WHEELS_DIR)/pointops-1.0-cp311-cp311-linux_x86_64.whl
-POINTGROUP_OPS_WHEEL := $(WHEELS_DIR)/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl
+WHEELS_DIR := ./wheels_container
 
+################################################################################
 # Targets
-.PHONY: all install data pointtransformerv3 test clean
+.PHONY: all docker-env wheels ptv3-add ptv3-update test clean copy
 
-all: install data pointtransformerv3
+# all: install data pointtransformerv3
 
-# build wheels and install python environment
-install: wheels
-	poetry lock --no-update
-	poetry install
-	poetry run pip install flash_attn --no-build-isolation
+# Build the pointcept environment docker image
+docker-env:
+	docker-compose up -d pointcept-env
 
-# build wheels for pointops and pointgroup_ops in docker container and deposit the .whl files in ./wheels
-wheels: $(POINTOPS_WHEEL) $(POINTGROUP_OPS_WHEEL)
+# Creates a pointcept-builder container that produces wheels for both
+# pointops and pointgroup_ops and then copies the wheels to the local host.
+# Cleans up container afterwards.
+copy-wheels:
+	docker-compose up -d pointcept-builder
+	mkdir -p wheels_container
+	docker cp pointcept-builder:/wheels/. wheels_container
+	docker-compose stop pointcept-builder
+	docker-compose rm -f pointcept-builder
 
-$(POINTOPS_WHEEL) $(POINTGROUP_OPS_WHEEL):
-	docker build -t $(POINTOPS_BUILDER_IMAGE) .
-	mkdir -p $(WHEELS_DIR)
-	docker run --gpus all -v $(WHEELS_DIR):/app/wheels_out -it $(POINTOPS_BUILDER_IMAGE) /bin/bash -c "cp /app/wheels/* /app/wheels_out/"
-
-# add the point transformer v3 repo as a submodule
-ptv3:
+################################################################################
+# Adds the PTv3 submodule from huggingface.
+# Requires ssh-agent on host to run on host or container.
+# Does not require running as the git repo already has the submodule initialised.
+ptv3-add:
 	git lfs install
 	mkdir -p models 
 	cd models && git submodule add git@hf.co:Pointcept/PointTransformerV3
 
-update-ptv3-models:
+# Pulls the PTv3 models submodule from huggingface.
+# Requires ssh-agent on host to run on host or container.
+# Run on host or on container to pull the models.
+ptv3-update:
 	git lfs install
-    mkdir -p models
+	mkdir -p models
 	cd models && git submodule update --init
 
+################################################################################
+# TODO below this point!
 # run the PTv3 test config
 test-ptv3:
 	poetry run python tools/test.py --config-file $(PTV3_CONFIG_PATH) --options save_path=$(PTV3_SAVE_PATH) weight=$(PTV3_WEIGHTS_PATH)
 
+################################################################################
 clean:
 	@if [ -d "$(wildcard $(WHEELS_DIR))" ]; then \
 			rm -rf "$(WHEELS_DIR)"; \

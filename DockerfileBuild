@@ -1,0 +1,69 @@
+# This Dockerfile first establishes a common base target, then uses
+# it for:
+#   1. An environment for compiling the pointops and pointgroup_ops wheels.
+#   2. A production environment for running Pointcept.
+
+####################################################################################
+### Start from a CUDA 12.1 base image
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
+ENV PYENV_ROOT=/usr/local/.pyenv \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_DEFAULT_TIMEOUT=100 \
+    DEBIAN_FRONTEND=noninteractive \ 
+    PYTHON_VERSION=3.11.8 \
+    WORKDIR=/usr/app \
+    TORCH_CUDA_ARCH_LIST=8.9
+WORKDIR $WORKDIR
+
+### System dependencies via apt.
+RUN apt-get update \ 
+    && apt-get install -y gcc curl make build-essential git \
+    libssl-dev zlib1g-dev libsparsehash-dev \
+    libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+    libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
+    && apt-get clean
+
+### Python configuration
+# Set-up necessary env vars for PyEnv
+ENV PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+# Install and configure pyenv
+RUN set -ex \
+    && curl https://pyenv.run | bash \
+    && pyenv update \
+    && pyenv install $PYTHON_VERSION \
+    && pyenv global $PYTHON_VERSION \
+    && pyenv rehash
+RUN pip install --upgrade pip
+
+# Now install poetry for dependency management
+ENV POETRY_HOME=/opt/poetry
+ENV PATH=$POETRY_HOME/bin:$PATH
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Partially construct the environment and build pointops & pointgroup_ops which
+# are required for the pointcept package install.
+RUN mkdir -p /wheels
+COPY libs libs
+WORKDIR libs
+RUN poetry config virtualenvs.create false
+RUN poetry install
+WORKDIR pointops 
+RUN TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel -d /wheels 2>&1 | tee /wheels/pointops-build.log
+WORKDIR ../pointgroup_ops
+RUN TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel -d /wheels 2>&1 | tee /wheels/pointgroup_ops-build.log
+
+
+# WORKDIR ../..
+# RUN pwd
+# # Install the wheels in the container
+# RUN pip install /wheels/*.whl
+
+# # Now finish installing the development environment and pointcept
+# COPY . .
+# RUN poetry install
+# RUN apt-get install -y git-lfs openssh-client

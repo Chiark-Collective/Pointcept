@@ -19,3 +19,4 @@ _poetry.lock
 notebooks/.ipynb_checkpoints
 notebooks/*.pth
 notebooks/output_voxels
+wheels_container

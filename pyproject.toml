@@ -68,11 +68,8 @@ torch_spline_conv = {url = "https://data.pyg.org/whl/torch-2.2.0+cu121/torch_spl
 clip = {git = "https://github.com/openai/CLIP.git"}
 laspy = "*"
 sharedarray = "3.2.4"
-
-# pointops = {path = "./libs/pointops"}
-# pointgroup_ops = {path = "./libs/pointgroup_ops"}
-# pointops = {path = "./wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"}
-# pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"}
+pointops = {path = "./wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"}
+pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"}
 
 [tool.poetry.dev-dependencies]
 jupyter="*"

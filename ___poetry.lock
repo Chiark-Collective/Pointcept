@@ -3693,38 +3693,6 @@ tomli = ">=1.2.2"
 poetry-plugin = ["poetry (>=1.0,<2.0)"]
 
 [[package]]
-name = "pointgroup-ops"
-version = "0.0.0"
-description = ""
-optional = false
-python-versions = "*"
-files = [
-    {file = "pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl", hash = "sha256:6c991e59d65b846382f2663f85f606972cc2d7f3357bfc966c40fa0d04784e4b"},
-]
-
-[package.source]
-type = "file"
-url = "wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"
-
-[[package]]
-name = "pointops"
-version = "1.0"
-description = ""
-optional = false
-python-versions = "*"
-files = [
-    {file = "pointops-1.0-cp311-cp311-linux_x86_64.whl", hash = "sha256:4a19daaa4ebf1e0c6f4df21a4261e22409892c14212c327ba7103664e229c82f"},
-]
-
-[package.dependencies]
-numpy = "*"
-torch = "*"
-
-[package.source]
-type = "file"
-url = "wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"
-
-[[package]]
 name = "polars"
 version = "1.2.1"
 description = "Blazingly fast DataFrame library"
@@ -5273,13 +5241,13 @@ tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
 name = "sympy"
-version = "1.13.1"
+version = "1.13.0"
 description = "Computer algebra system (CAS) in Python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "sympy-1.13.1-py3-none-any.whl", hash = "sha256:db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8"},
-    {file = "sympy-1.13.1.tar.gz", hash = "sha256:9cebf7e04ff162015ce31c9c6c9144daa34a93bd082f54fd8f12deca4f47515f"},
+    {file = "sympy-1.13.0-py3-none-any.whl", hash = "sha256:6b0b32a4673fb91bd3cac3b55406c8e01d53ae22780be467301cc452f6680c92"},
+    {file = "sympy-1.13.0.tar.gz", hash = "sha256:3b6af8f4d008b9a1a6a4268b335b984b23835f26d1d60b0526ebc71d48a25f57"},
 ]
 
 [package.dependencies]
@@ -6257,4 +6225,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "d9b7e2ebaddeebcabe0dc35f391f7c8fae266095a799783a3999bba48b93c1bf"
+content-hash = "bd97af77af979d1a3758af6dc594096de962841d4c34beba3ab42353b03bd808"

@@ -1,6 +1,9 @@
 services:
   pointcept-env:
-    image: pointcept-env:latest
+    container_name: pointcept-env
+    build:
+      context: .
+      dockerfile: DockerfileEnv
     volumes:
       - /data/sdd/qh:/data
       - ${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent
@@ -11,3 +14,10 @@ services:
       - SSH_AUTH_SOCK=/ssh-agent
     stdin_open: true
     tty: true
+
+  pointcept-builder:
+    container_name: pointcept-builder
+    build:
+      context: .
+      dockerfile: DockerfileBuild
+    command: tail -f /dev/null
