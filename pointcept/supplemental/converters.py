@@ -7,21 +7,17 @@ import laspy
 import torch
 import numpy as np
 import pandas as pd
-from pointcept.supplemental.utils import get_data_root
+from pointcept.supplemental.utils import *
 
 
-def las_to_np_pth(input_las_path, scene_id, num_points=None, spoof_normal=True, spoof_gt=True):
+def las_to_np_pth(input_las_path, scene_id, num_points=None, spoof_normal=True, spoof_gt=True, print_contents=True):
     """This function takes an input .las file and outputs a PyTorch state dictionary that is compatible with
     Pointcept's data config for Scannet."""
     
     data_root = get_data_root()
 
-    # Make the DATA_ROOT directory if it doesn't exist
-    try:
-        os.makedirs(data_root, exist_ok=True)
-    except Exception as e:
-        print(f"ERROR: Unable to create directory {data_root}. {e}")
-        exit(1)
+    if print_contents:
+        read_las_file(input_las_path)
 
     with laspy.open(input_las_path) as file:
         las = file.read()
@@ -92,10 +88,11 @@ def clear_directory(directory):
             print(f"Failed to delete {file_path}. Reason: {e}")
 
 
-def partition_pth_file(input_pth_filename, name_tag=None, num_voxels_x=None, num_voxels_y=None, num_voxels_z=None):
+def partition_pth_file(input_pth_filename, name_tag=None, num_voxels_x=None, num_voxels_y=None, num_voxels_z=None, print_contents=True):
     """This function takes a processed .pth file from the data_root directory,
     optionally splits it into the requested number of sub-voxels (defaulting unspecified dimensions to 1),
-    creates subdirectories for train, test, and val, and puts the subvoxels into the 'val' directory within the specified output directory."""
+    creates subdirectories for train, test, and val, and puts the subvoxels into the 'val' directory within
+    the specified output directory for inference."""
     
     # Get DATA_ROOT from environment
     data_root = get_data_root()

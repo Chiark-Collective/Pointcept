@@ -10,13 +10,21 @@ from dotenv import load_dotenv
 
 
 def get_data_root():
-    """Load environment variables and return DATA_ROOT or exit if not set, else exit."""
+    """Load environment variables and return DATA_ROOT.
+    Exits the program if DATA_ROOT is not set or if the directory cannot be ensured."""
     load_dotenv()  # Ensure environment variables are loaded
     data_root = os.getenv('DATA_ROOT')
     if data_root is None:
         print("ERROR: DATA_ROOT environment variable not found.")
         exit(1)  # Exit if DATA_ROOT is not found
+        # Make the DATA_ROOT directory if it doesn't exist
+    try:
+        os.makedirs(data_root, exist_ok=True)
+    except Exception as e:
+        print(f"ERROR: Unable to create directory {data_root}. {e}")
+        exit(1)
     return data_root
+
 
 
 def print_dict_structure(data, indent=0):
