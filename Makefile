@@ -4,9 +4,7 @@ WHEELS_DIR := ./wheels_container
 
 ################################################################################
 # Targets
-.PHONY: all docker-env wheels ptv3-add ptv3-update test clean copy
-
-# all: install data pointtransformerv3
+.PHONY: all docker-env copy-wheels local-install ptv3-add ptv3-update test clean copy
 
 # Build the pointcept environment docker image
 docker-env:
@@ -21,6 +19,11 @@ copy-wheels:
 	docker cp pointcept-builder:/wheels/. wheels_container
 	docker-compose stop pointcept-builder
 	docker-compose rm -f pointcept-builder
+
+# Run this for a local install for development. Assumes nothing about your
+# system environment, run only if you've prepared your system for Pointcept!
+# local-install:
+# 	poetry install
 
 ################################################################################
 # Adds the PTv3 submodule from huggingface.
@@ -40,12 +43,12 @@ ptv3-update:
 	cd models && git submodule update --init
 
 ################################################################################
-# TODO below this point!
-# run the PTv3 test config
+# Run the PTv3 test config
 test-ptv3:
 	poetry run python tools/test.py --config-file $(PTV3_CONFIG_PATH) --options save_path=$(PTV3_SAVE_PATH) weight=$(PTV3_WEIGHTS_PATH)
 
 ################################################################################
+# Cleans any newly built wheels and de-inits the PTv3 model submodule.
 clean:
 	@if [ -d "$(wildcard $(WHEELS_DIR))" ]; then \
 			rm -rf "$(WHEELS_DIR)"; \
