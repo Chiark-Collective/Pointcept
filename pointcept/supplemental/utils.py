@@ -1,10 +1,22 @@
 """
 Submodule to supplement Pointcept utils for heritage processing and development.
 """
+import os
 import laspy
 import torch
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
+
+
+def get_data_root():
+    """Load environment variables and return DATA_ROOT or exit if not set, else exit."""
+    load_dotenv()  # Ensure environment variables are loaded
+    data_root = os.getenv('DATA_ROOT')
+    if data_root is None:
+        print("ERROR: DATA_ROOT environment variable not found.")
+        exit(1)  # Exit if DATA_ROOT is not found
+    return data_root
 
 
 def print_dict_structure(data, indent=0):

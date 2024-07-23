@@ -7,21 +7,14 @@ import laspy
 import torch
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
+from pointcept.supplemental.utils import get_data_root
 
 
 def las_to_np_pth(input_las_path, scene_id, num_points=None, spoof_normal=True, spoof_gt=True):
     """This function takes an input .las file and outputs a PyTorch state dictionary that is compatible with
     Pointcept's data config for Scannet."""
     
-    # Load environment variables from the .env file
-    load_dotenv()
-
-    # Check if DATA_ROOT is set in the environment
-    data_root = os.getenv('DATA_ROOT')
-    if data_root is None:
-        print("ERROR: DATA_ROOT environment variable not found.")
-        exit(1)
+    data_root = get_data_root()
 
     # Make the DATA_ROOT directory if it doesn't exist
     try:
@@ -104,22 +97,8 @@ def partition_pth_file(input_pth_filename, name_tag=None, num_voxels_x=None, num
     optionally splits it into the requested number of sub-voxels (defaulting unspecified dimensions to 1),
     creates subdirectories for train, test, and val, and puts the subvoxels into the 'val' directory within the specified output directory."""
     
-    # Load environment variables from the .env file
-    load_dotenv()
-
     # Get DATA_ROOT from environment
-    data_root = os.getenv('DATA_ROOT')
-    if data_root is None:
-        print("ERROR: DATA_ROOT environment variable not found.")
-        exit(1)
-
-    # Determine the output base directory name based on name_tag or default to structured naming
-    # if name_tag:
-    #     base_output_directory = os.path.join(data_root, name_tag)
-    # else:
-    #     base_output_directory = os.path.join(data_root, "output_subvoxels")
-
-
+    data_root = get_data_root()
 
     # Load data from the .pth file
     input_pth_path = os.path.join(data_root, input_pth_filename)
@@ -185,14 +164,11 @@ def partition_pth_file(input_pth_filename, name_tag=None, num_voxels_x=None, num
 
         print(f"All voxel files saved in {val_directory}")
     else:
-        # No voxelization requested, save the original data in the 'val' directory with a modified scene_id
-        # original_scene_id = data['scene_id']
-        # data['scene_id'] = f"{original_scene_id}_original"
         original_file_path = os.path.join(val_directory, f'{data["scene_id"]}.pth')
         torch.save(data, original_file_path)
         print(f"Original data saved in {val_directory} with file {original_file_path}")
 
 
 if __name__ == "__main__":
-    # las_to_np_pth('/data/sdd/training_v2.las', 'scene01', num_points=10000)
-    partition_pth_file("scene01_n10000.pth", name_tag="my_experiment", num_voxels_x=3)
+    las_to_np_pth('/data/sdd/training_v2.las', 'scene01', num_points=50000)
+    partition_pth_file("scene01_n50000.pth", num_voxels_x=3)
