@@ -70,6 +70,7 @@ laspy = "*"
 sharedarray = "3.2.4"
 pointops = {path = "./wheels/pointops-1.0-cp311-cp311-linux_x86_64.whl"}
 pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64.whl"}
+python-dotenv = "^1.0.1"
 
 [tool.poetry.dev-dependencies]
 jupyter="*"
