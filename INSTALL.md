@@ -1,15 +1,57 @@
 # install 
 
-## environment
+The installation can be done via a docker container or locally, if you have configured python, cuda, and all other dependencies already.
+
+## docker container
+
+To install the container run
+
+```sh
+docker-compose up pointcept-env -d
+```
+
+or just
+
+```sh
+make docker-env
+```
+
+to get into a bash container inside the container:
+
+```sh
+docker exec -it pointcept-env /bin/bash
+```
+
+or just
+
+```sh
+make enter-container
+```
+
+## host environment
 
 Assuming you have docker, poetry and python 3.11 installed (for this I use pyenv), do:
 
 ```sh
-make install
+poetry install
+poetry shell
+pip install flash_attn  # poetry doesn't play well with this dependency
 ```
 
-This will build the necessary CUDA wheels for `pointops`, `pointgroup_ops` and then create a python
-environment with these and all other dependencies.
+and you should be able to run anything relevant inside the poetry environment. If you're in doubt about this, use the container where everything is taken care of for you.
+
+## building pointops and pointgroup_ops (advanced)
+
+These pointcept libraries are already compiled to wheels that are included in this repository under `/wheels`.
+Should you need to recompile them (unlikely but possible), you'll need to use the docker container for this purpose that matches the relevant cuda/torch etc dependencies appropriately.
+A make alias is included to cover this.
+
+```sh
+make copy-wheels
+```
+
+this will deposit the newly compiled wheels in `/wheels container` where you can copy them over the `/wheels` where poetry expects to find them.
+You may wish to commit these binaries (they're small enough that git LFS would be excessive).
 
 ## PointTransformerV3 model
 
@@ -20,6 +62,8 @@ make ptv3
 ```
 
 Note that you have to add your SSH key to huggingface first. This will take some time (7.4G).
+
+Also note that if you're using the docker container, run this *outside* the container, and docker-compose will mount the relevant files for you.
 
 # datasets
 
@@ -44,12 +88,12 @@ http://www.scan-net.org/
 Unzipped to `./data/scannet`.
 
 
-# Test the PTV3 model on ScanNet
+<!-- # Test the PTV3 model on ScanNet
 
 # test
 ```sh
-make test-ptv3
-```
+make test-ptv3 TODO: needs fixed
+``` -->
 
 # refs
 
