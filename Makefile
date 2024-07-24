@@ -4,11 +4,14 @@ WHEELS_DIR := ./wheels_container
 
 ################################################################################
 # Targets
-.PHONY: all docker-env copy-wheels local-install ptv3-add ptv3-update test clean copy
+.PHONY: all docker-env copy-wheels enter-container local-install ptv3-add ptv3-update test clean copy
 
 # Build the pointcept environment docker image
 docker-env:
 	docker-compose up -d pointcept-env
+
+enter-container:
+	docker exec -it pointcept-env /bin/bash
 
 # Creates a pointcept-builder container that produces wheels for both
 # pointops and pointgroup_ops and then copies the wheels to the local host.
