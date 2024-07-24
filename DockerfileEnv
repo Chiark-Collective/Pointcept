@@ -45,22 +45,16 @@ ENV POETRY_HOME=/opt/poetry
 ENV PATH=$POETRY_HOME/bin:$PATH
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
-# Partially construct the environment and build pointops & pointgroup_ops which
-# are required for the pointcept package install.
-# RUN mkdir -p /wheels
-# COPY libs libs
-# WORKDIR libs
-# RUN poetry config virtualenvs.create false
-# RUN poetry install
-# WORKDIR pointops 
-# RUN TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel -d /wheels 2>&1 | tee /wheels/pointops-build.log
-# WORKDIR ../pointgroup_ops
-# RUN TORCH_CUDA_ARCH_LIST=8.9 python setup.py bdist_wheel -d /wheels 2>&1 | tee /wheels/pointgroup_ops-build.log
-# WORKDIR ../..
-# RUN pwd
-# Install the wheels in the container
-# RUN pip install ./wheels/*.whl
+# Copy over only the files we need to build pointcept, docker-compose will
+# mount the rest of the necessary files via a volume.
+COPY pointcept pointcept
+COPY wheels wheels
+COPY pyproject.toml .
+COPY poetry.lock .
 
 # Now finish installing the development environment and pointcept
-COPY . .
+RUN poetry config virtualenvs.create false
+RUN poetry lock --no-update
 RUN poetry install
+# poetry does not like flash_attn
+RUN pip install flash_attn

@@ -6,12 +6,14 @@ services:
       dockerfile: DockerfileEnv
     volumes:
       - /data/sdd/qh:/data
+      - ./:/usr/app
       - ${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent
     ports:
       - "4000:80"
     command: tail -f /dev/null
     environment:
       - SSH_AUTH_SOCK=/ssh-agent
+      - INSIDE_POINTCEPT_DOCKER=true
     stdin_open: true
     tty: true
 
@@ -20,4 +22,6 @@ services:
     build:
       context: .
       dockerfile: DockerfileBuild
+    environment:
+      - INSIDE_POINTCEPT_DOCKER=true
     command: tail -f /dev/null

@@ -9,9 +9,24 @@ import pandas as pd
 from dotenv import load_dotenv
 
 
-def get_data_root():
-    """Load environment variables and return DATA_ROOT.
-    Exits the program if DATA_ROOT is not set or if the directory cannot be ensured."""
+def in_docker():
+    """
+    Check if the code is running inside a Docker container managed by the Pointcept project.
+
+    Returns:
+        bool: True if running inside Docker, False otherwise.
+    """
+    return os.getenv('INSIDE_POINTCEPT_DOCKER', 'false') == 'true'
+
+
+def get_data_root2():
+    """
+    Loads environment variables, ensures 'DATA_ROOT' exists, and returns its path.
+    Exits with an error if 'DATA_ROOT' is not set or the directory cannot be created.
+    
+    Returns:
+        str: Path to the 'DATA_ROOT' directory.
+    """
     load_dotenv()  # Ensure environment variables are loaded
     data_root = os.getenv('DATA_ROOT')
     if data_root is None:
@@ -20,17 +35,56 @@ def get_data_root():
         # Make the DATA_ROOT directory if it doesn't exist
     try:
         os.makedirs(data_root, exist_ok=True)
+        os.makedirs(data_root+'/results', exist_ok=True)
     except Exception as e:
         print(f"ERROR: Unable to create directory {data_root}. {e}")
         exit(1)
     return data_root
 
+def ensure_data_root():
+    data_root = './data'
+    try:
+        os.makedirs(data_root, exist_ok=True)
+    except Exception as e:
+        print(f"ERROR: Unable to create directory {data_root}. {e}")
+        exit(1)
+    return data_root
 
+def ensure_category_dirs(category):
+    """
+    Creates necessary directories for a specified category within a fixed root data path.
+    
+    Args:
+        category (str): The name of the category for which to create directories.
+
+    Returns:
+        str: The path to the newly created category directory, which includes a results subdirectory.
+
+    Raises:
+        Exception: If directory creation fails, prints an error message and exits the program.
+    """
+    data_root = './data'
+    category_root = data_root + f'/{category}'
+    try:
+        os.makedirs(data_root, exist_ok=True)
+        os.makedirs(category_root, exist_ok=True)
+    except Exception as e:
+        print(f"ERROR: Unable to create directory {data_root}. {e}")
+        exit(1)
+    return category_root
 
 def print_dict_structure(data, indent=0):
-    """This function takes a dict, like those loaded from a numpy or torch file,
-    and prints its contents in a human-readable format. It specifically looks out for 
-    numpy arrays and torch tensors."""
+    """
+    Prints the structure of a dictionary, emphasizing the layout of nested dictionaries,
+    numpy arrays, and PyTorch tensors. It details types, shapes, and data types, and includes a preview of elements.
+
+    Parameters:
+        data (dict): Dictionary to print, potentially containing complex data structures.
+        indent (int): Indentation level for pretty printing, increasing with each dictionary level.
+
+    Returns:
+        None: Outputs directly to the console.
+    """
     for key, value in data.items():
         print('    ' * indent + f'{key}: ', end='')
         if isinstance(value, dict):
@@ -64,7 +118,18 @@ def print_dict_structure(data, indent=0):
 
 
 def read_las_file(file_path):
-    # Open the LAS file
+    """
+    Reads and prints key information from a LAS file, including metadata, header details, and a sample of point data.
+    
+    This function opens a LAS file, reads its header to extract file metadata such as the LAS version and point format,
+    and then reads point data to provide a sample of coordinates, intensities, and classifications.
+    
+    Parameters:
+        file_path (str): The path to the LAS file to be read.
+    
+    Returns:
+        None: Outputs directly to the console.
+    """
     with laspy.open(file_path) as file:
         # Get the header to access metadata
         header = file.header
