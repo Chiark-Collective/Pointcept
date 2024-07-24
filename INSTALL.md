@@ -50,7 +50,7 @@ A make alias is included to cover this.
 make copy-wheels
 ```
 
-this will deposit the newly compiled wheels in `/wheels container` where you can copy them over the `/wheels` where poetry expects to find them.
+this will deposit the newly compiled wheels in `/wheels_container` where you can copy them over the `/wheels` where poetry expects to find them.
 You may wish to commit these binaries (they're small enough that git LFS would be excessive).
 
 ## PointTransformerV3 model
@@ -58,12 +58,17 @@ You may wish to commit these binaries (they're small enough that git LFS would b
 To clone the point transformer V3 model repo as a git submodule, including pretrained model weights:
 
 ```sh
-make ptv3
+make ptv3-update
 ```
 
 Note that you have to add your SSH key to huggingface first. This will take some time (7.4G).
-
 Also note that if you're using the docker container, run this *outside* the container, and docker-compose will mount the relevant files for you.
+
+If you have run `make clean` and de-initialised the submodule, you can re-add it with
+
+```sh
+make ptv3-add
+```
 
 # datasets
 
