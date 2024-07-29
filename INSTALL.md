@@ -2,7 +2,7 @@
 
 The installation can be done via a docker container or locally, if you have configured python, cuda, and all other dependencies already.
 
-## docker container
+## 1a docker container (recommended)
 
 To install the container run
 
@@ -28,7 +28,7 @@ or just
 make enter-container
 ```
 
-## host environment
+## 1b. host environment (advanced)
 
 Assuming you have docker, poetry and python 3.11 installed (for this I use pyenv), do:
 
@@ -38,9 +38,11 @@ poetry shell
 pip install flash_attn  # poetry doesn't play well with this dependency
 ```
 
-and you should be able to run anything relevant inside the poetry environment. If you're in doubt about this, use the container where everything is taken care of for you.
+and you should be able to run anything relevant inside the poetry environment.
 
-## building pointops and pointgroup_ops (advanced)
+If you're in doubt about local configuration, use the container where everything is taken care of for you!
+
+## 1c. building pointops and pointgroup_ops (advanced - should not be needed for regular use)
 
 These pointcept libraries are already compiled to wheels that are included in this repository under `/wheels`.
 Should you need to recompile them (unlikely but possible), you'll need to use the docker container for this purpose that matches the relevant cuda/torch etc dependencies appropriately.
@@ -53,15 +55,22 @@ make copy-wheels
 this will deposit the newly compiled wheels in `/wheels_container` where you can copy them over the `/wheels` where poetry expects to find them.
 You may wish to commit these binaries (they're small enough that git LFS would be excessive).
 
-## PointTransformerV3 model
+## 2. PointTransformerV3 model
 
-To clone the point transformer V3 model repo as a git submodule, including pretrained model weights:
+To clone the point transformer V3 model repo as a git submodule, including pretrained model weights, we'll pull the model weights from the Pointcept huggingface repo.
+
+Note that you have to add your SSH key to huggingface first. 
+Huggingface provides full instructions on how to do this:
+- https://huggingface.co/docs/hub/en/security-git-ssh
+
+
 
 ```sh
 make ptv3-update
 ```
 
-Note that you have to add your SSH key to huggingface first. This will take some time (7.4G).
+This will take some time (7.4G).
+
 Also note that if you're using the docker container, run this *outside* the container, and docker-compose will mount the relevant files for you.
 
 If you have run `make clean` and de-initialised the submodule, you can re-add it with
@@ -69,8 +78,11 @@ If you have run `make clean` and de-initialised the submodule, you can re-add it
 ```sh
 make ptv3-add
 ```
+You should be now ready to follow [INSTRUCTIONS.md](INSTRUCTIONS.md) to preprocess and train your heritage data.
 
-# datasets
+# 3. Pointcept datasets
+
+If you want to run any testing or inference using the datasets used to train the pre-trained Pointcept models, a nonexhaustive selection is as follows:
 
 ## S3DIS
 
@@ -80,7 +92,7 @@ https://connecthkuhk-my.sharepoint.com/:u:/g/personal/wuxy_connect_hku_hk/ERtd0Q
 OR just aligned (and/or raw):
 https://cvg-data.inf.ethz.ch/s3dis/
 
-I unzipped em to `./data/s3dis`
+Unzipped to `./data/s3dis`
 
 ## ScanNet v2
 
@@ -91,14 +103,6 @@ OR raw:
 http://www.scan-net.org/
 
 Unzipped to `./data/scannet`.
-
-
-<!-- # Test the PTV3 model on ScanNet
-
-# test
-```sh
-make test-ptv3 TODO: needs fixed
-``` -->
 
 # refs
 

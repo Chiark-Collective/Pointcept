@@ -22,7 +22,7 @@ Basic instructions to run in a docker container are as follows.
 
 First, we need access to the model weights on Pointcept's huggingface repository, so ensure you have an account there and also ensure you have an ssh agent running on your host machine with access to your ssh key.
 
-Hugginface provides full instructions on how to do this:
+Huggingface provides full instructions on how to do this:
 - https://huggingface.co/docs/hub/en/security-git-ssh
 
 Now we're ready to build the docker container and download the model weights git submodule.
