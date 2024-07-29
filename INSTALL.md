@@ -82,7 +82,7 @@ You should be now ready to follow [INSTRUCTIONS.md](INSTRUCTIONS.md) to preproce
 
 # 3. Pointcept datasets
 
-If you want to run any testing or inference using the datasets used to train the pre-trained Pointcept models, a nonexhaustive selection is as follows:
+If you want to run any testing or inference with the datasets used to train the pre-trained Pointcept models, a nonexhaustive selection is as follows:
 
 ## S3DIS
 
