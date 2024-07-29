@@ -2,7 +2,19 @@
 
 In this doc we'll briefly explain how to run inference on heritage data using the scannet PTv3+PPT model.
 
-NOTE: all commands should be run from the pointcept root directory!
+**All commands should be run from the pointcept root directory!**
+
+Run each step inside the docker container. Make sure the container is started:
+
+```sh
+docker compose up pointcept-env -d
+```
+
+Then enter a shell in the container before running the subsequent commands:
+
+```sh
+docker compose exec -it pointcept-env /bin/bash
+```
 
 ### Preprocessing 1: convert to .pth
 
