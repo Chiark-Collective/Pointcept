@@ -7,16 +7,18 @@ Please cite our work if the code is helpful to you.
 
 from functools import partial
 from collections import OrderedDict
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
 from pointcept.models.utils.structure import Point
 from pointcept.models.builder import MODELS
 from pointcept.models.losses import build_criteria
+from pointcept.models.point_prompt_training import PDNorm
 
 
 @MODELS.register_module("PPT-v1m1")
-class PointPromptTraining(nn.Module):
+class PointPromptTraining_(nn.Module):
     """
     PointPromptTraining provides Data-driven Context and enables multi-dataset training with
     Language-driven Categorical Alignment. PDNorm is supported by SpUNet-v1m3 to adapt the
@@ -116,3 +118,171 @@ class PointPromptTraining(nn.Module):
         # test
         else:
             return dict(seg_logits=seg_logits)
+
+@MODELS.register_module("PPT-v1m3")
+class PointPromptTraining(nn.Module):
+    """Point Prompt Training for multi-dataset 3D scene understanding."""
+
+    def __init__(
+        self,
+        backbone: Dict,
+        pdnorm: Dict,
+        criteria: Optional[Dict] = None,
+        backbone_out_channels: int = 96,
+        context_channels: int = 256,
+        dataset_labels: Dict[str, List[str]] = None,
+        template: str = "[x]",
+        clip_model: str = "ViT-B/16",
+        backbone_mode: bool = False,
+    ):
+        """Initialize the PointPromptTraining model."""
+        super().__init__()
+        print(dataset_labels)
+        self.backbone_mode = backbone_mode
+        self.template = template
+        
+        self._dataset_labels = None
+        self._class_embedding = None
+        
+        # Create PDNorm factory and inject it into backbone config
+        norm_layer_factory = self.create_pdnorm_factory(pdnorm, dataset_labels.keys())
+        self.backbone = MODELS.build({**backbone, 'norm_layer_factory': norm_layer_factory})
+        
+        self.criteria = build_criteria(criteria)
+        self.clip_model_string = clip_model
+        self.backbone_out_channels = backbone_out_channels
+        # if not self.backbone_mode:
+        #     self._init_clip(clip_model, backbone_out_channels)
+        
+        # Trigger setter to initialize everything
+        self.dataset_labels = dataset_labels
+
+    def create_pdnorm_factory(self, pdnorm_config: Dict, conditions: List[str]):
+        """Create a factory function for PDNorm layers based on the config."""
+        if not pdnorm_config['use_pdnorm']:
+            return None
+
+        def create_pd_norm_layers():
+            bn_layer = partial(
+                PDNorm,
+                norm_layer=partial(nn.BatchNorm1d, eps=pdnorm_config['eps'], momentum=pdnorm_config['momentum'], affine=pdnorm_config['affine']),
+                conditions=conditions,
+                decouple=pdnorm_config['decouple'],
+                adaptive=pdnorm_config['adaptive'],
+            ) if pdnorm_config['bn'] else partial(nn.BatchNorm1d, eps=pdnorm_config['eps'], momentum=pdnorm_config['momentum'])
+
+            ln_layer = partial(
+                PDNorm,
+                norm_layer=partial(nn.LayerNorm, eps=pdnorm_config['eps'], elementwise_affine=pdnorm_config['affine']),
+                conditions=conditions,
+                decouple=pdnorm_config['decouple'],
+                adaptive=pdnorm_config['adaptive'],
+            ) if pdnorm_config['ln'] else partial(nn.LayerNorm, eps=pdnorm_config['eps'])
+
+            return bn_layer, ln_layer
+
+        return create_pd_norm_layers
+
+    # def _init_clip(self, clip_model: str, backbone_out_channels: int) -> None:
+    #     """Initialize CLIP model and related components."""
+    #     import clip
+    #     self.clip_model, _ = clip.load(clip_model, device="cpu", download_root="./.cache/clip")
+    #     self.clip_model.requires_grad_(False)
+        
+    #     self.proj_head = nn.Linear(
+    #         backbone_out_channels, self.clip_model.text_projection.shape[1]
+    #     )
+    #     print(f'proj_head shape says {self.proj_head}')
+    #     self.logit_scale = self.clip_model.logit_scale
+
+    @property
+    def dataset_labels(self) -> Dict[str, List[str]]:
+        """Get the dataset labels."""
+        return self._dataset_labels
+
+    @dataset_labels.setter
+    def dataset_labels(self, new_dataset_labels: Dict[str, List[str]]) -> None:
+        """Set dataset labels and update related components."""
+        self._dataset_labels = new_dataset_labels
+        if not self.backbone_mode:
+            self.update_class_embeddings()
+            self.embedding_table = nn.Embedding(len(new_dataset_labels), self.proj_head.in_features)
+
+
+    def update_class_embeddings(self) -> None:
+        """Update class embeddings based on current dataset labels."""
+        import clip
+        clip_model, _ = clip.load(self.clip_model_string, device="cpu", download_root="./.cache/clip")
+        clip_model.requires_grad_(False)
+        
+        self.proj_head = nn.Linear(
+            self.backbone_out_channels, clip_model.text_projection.shape[1]
+        )
+        print(f'proj_head shape says {self.proj_head}')
+        self.logit_scale = clip_model.logit_scale
+
+        all_classes = list(set(cls for classes in self._dataset_labels.values() for cls in classes))
+        class_prompt = [self.template.replace("[x]", name) for name in all_classes]
+        class_token = clip.tokenize(class_prompt)
+        class_embedding = clip_model.encode_text(class_token)
+        class_embedding = class_embedding / class_embedding.norm(dim=-1, keepdim=True)
+        
+        # Update mappings for class names and dataset-specific valid indices
+        self.class_name_to_index = {name: idx for idx, name in enumerate(all_classes)}
+        self.dataset_to_valid_indices = {
+            dataset: [self.class_name_to_index[cls] for cls in classes]
+            for dataset, classes in self._dataset_labels.items()
+        }
+        
+        # Update class embedding (triggers setter)
+        if 'class_embedding' in self._buffers:
+            del self._buffers['class_embedding']
+        self.register_buffer('class_embedding', class_embedding, persistent=True)
+
+    def forward(self, data_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Forward pass of the model."""
+        condition = data_dict["condition"][0]
+        assert condition in self._dataset_labels.keys()
+        
+        # Get context embedding for the current dataset
+        context = self.embedding_table(
+            torch.tensor(
+                [list(self._dataset_labels.keys()).index(condition)], device=data_dict["coord"].device
+            )
+        )
+        data_dict["context"] = context
+        
+        # Get features from backbone
+        point = self.backbone(data_dict)
+        feat = point.feat if isinstance(point, Point) else point
+            
+        if self.backbone_mode:
+            return feat
+            
+        # Project features and compute similarities
+        feat = self.proj_head(feat)
+        feat = feat / feat.norm(dim=-1, keepdim=True)
+        
+        valid_indices = self.dataset_to_valid_indices[condition]
+        sim = feat @ self.class_embedding[valid_indices, :].t()
+        
+        logit_scale = self.logit_scale.exp()
+        seg_logits = logit_scale * sim
+        
+        # Compute loss or return logits based on mode
+        if self.training:
+            loss = self.criteria(seg_logits, data_dict["segment"])
+            return dict(loss=loss)
+        elif "segment" in data_dict.keys():
+            loss = self.criteria(seg_logits, data_dict["segment"])
+            return dict(loss=loss, seg_logits=seg_logits)
+        else:
+            return dict(seg_logits=seg_logits)
+
+    def update_dataset_classes(self, dataset_name: str, new_classes: List[str]) -> None:
+        """Update classes for a specific dataset."""
+        self.dataset_labels = {**self._dataset_labels, dataset_name: new_classes}
+
+    def add_dataset(self, dataset_name: str, classes: List[str]) -> None:
+        """Add a new dataset with its classes."""
+        self.dataset_labels = {**self._dataset_labels, dataset_name: classes}

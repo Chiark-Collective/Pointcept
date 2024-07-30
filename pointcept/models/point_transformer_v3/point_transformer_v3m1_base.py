@@ -19,12 +19,11 @@ try:
 except ImportError:
     flash_attn = None
 
-from pointcept.models.point_prompt_training import PDNorm
+# from pointcept.models.point_prompt_training import PDNorm
 from pointcept.models.builder import MODELS
 from pointcept.models.utils.misc import offset2bincount
 from pointcept.models.utils.structure import Point
 from pointcept.models.modules import PointModule, PointSequential
-
 
 class RPE(torch.nn.Module):
     def __init__(self, patch_size, num_heads):
@@ -711,4 +710,171 @@ class PointTransformerV3(PointModule):
         #         indptr=nn.functional.pad(point.offset, (1, 0)),
         #         reduce="mean",
         #     )
+        return point
+
+@MODELS.register_module("PT-v3m2")
+class PointTransformerV3(PointModule):
+    def __init__(
+        self,
+        in_channels=6,
+        order=("z", "z_trans"),
+        stride=(2, 2, 2, 2),
+        enc_depths=(2, 2, 2, 6, 2),
+        enc_channels=(32, 64, 128, 256, 512),
+        enc_num_head=(2, 4, 8, 16, 32),
+        enc_patch_size=(48, 48, 48, 48, 48),
+        dec_depths=(2, 2, 2, 2),
+        dec_channels=(64, 64, 128, 256),
+        dec_num_head=(4, 4, 8, 16),
+        dec_patch_size=(48, 48, 48, 48),
+        mlp_ratio=4,
+        qkv_bias=True,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
+        drop_path=0.3,
+        pre_norm=True,
+        shuffle_orders=True,
+        enable_rpe=False,
+        enable_flash=True,
+        upcast_attention=True,
+        upcast_softmax=True,
+        cls_mode=False,
+        norm_layer_factory=None,
+    ):
+        super().__init__()
+        self.num_stages = len(enc_depths)
+        self.order = [order] if isinstance(order, str) else order
+        self.cls_mode = cls_mode
+        self.shuffle_orders = shuffle_orders
+
+        self.norm_layers = self._get_norm_layers(norm_layer_factory)
+        self.act_layer = nn.GELU
+
+        self.embedding = self._create_embedding(in_channels, enc_channels[0])
+        self.enc = self._create_encoder(enc_depths, enc_channels, enc_num_head, enc_patch_size, stride, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax)
+        
+        if not self.cls_mode:
+            self.dec = self._create_decoder(dec_depths, dec_channels, dec_num_head, dec_patch_size, enc_channels, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax)
+
+    def _get_norm_layers(self, norm_layer_factory):
+        if norm_layer_factory is not None:
+            return norm_layer_factory()
+        return partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01), nn.LayerNorm
+
+    def _create_embedding(self, in_channels, embed_channels):
+        return Embedding(
+            in_channels=in_channels,
+            embed_channels=embed_channels,
+            norm_layer=self.norm_layers[0],
+            act_layer=self.act_layer,
+        )
+
+    def _create_encoder(self, enc_depths, enc_channels, enc_num_head, enc_patch_size, stride, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax):
+        enc_drop_path = [x.item() for x in torch.linspace(0, drop_path, sum(enc_depths))]
+        enc = PointSequential()
+        for s in range(self.num_stages):
+            enc_drop_path_ = enc_drop_path[sum(enc_depths[:s]) : sum(enc_depths[: s + 1])]
+            stage = self._create_encoder_stage(s, enc_depths[s], enc_channels, enc_num_head[s], enc_patch_size[s], stride[s-1] if s > 0 else None, enc_drop_path_, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax)
+            if len(stage) != 0:
+                enc.add(module=stage, name=f"enc{s}")
+        return enc
+
+    def _create_encoder_stage(self, stage, depth, channels, num_heads, patch_size, stride, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax):
+        dec = PointSequential()
+        if stage > 0:
+            dec.add(
+                SerializedPooling(
+                    in_channels=channels[stage - 1],
+                    out_channels=channels[stage],
+                    stride=stride,
+                    norm_layer=self.norm_layers[0],
+                    act_layer=self.act_layer,
+                ),
+                name="down",
+            )
+        for i in range(depth):
+            dec.add(
+                Block(
+                    channels=channels[stage],
+                    num_heads=num_heads,
+                    patch_size=patch_size,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    qk_scale=qk_scale,
+                    attn_drop=attn_drop,
+                    proj_drop=proj_drop,
+                    drop_path=drop_path[i],
+                    norm_layer=self.norm_layers[1],
+                    act_layer=self.act_layer,
+                    pre_norm=pre_norm,
+                    order_index=i % len(self.order),
+                    cpe_indice_key=f"stage{stage}",
+                    enable_rpe=enable_rpe,
+                    enable_flash=enable_flash,
+                    upcast_attention=upcast_attention,
+                    upcast_softmax=upcast_softmax,
+                ),
+                name=f"block{i}",
+            )
+        return dec
+
+    def _create_decoder(self, dec_depths, dec_channels, dec_num_head, dec_patch_size, enc_channels, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax):
+        dec_drop_path = [x.item() for x in torch.linspace(0, drop_path, sum(dec_depths))]
+        dec = PointSequential()
+        dec_channels = list(dec_channels) + [enc_channels[-1]]
+        for s in reversed(range(self.num_stages - 1)):
+            dec_drop_path_ = dec_drop_path[sum(dec_depths[:s]) : sum(dec_depths[: s + 1])]
+            dec_drop_path_.reverse()
+            stage = self._create_decoder_stage(s, dec_depths[s], dec_channels[s], dec_channels[s+1], enc_channels[s], dec_num_head[s], dec_patch_size[s], dec_drop_path_, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax)
+            dec.add(module=stage, name=f"dec{s}")
+        return dec
+
+    def _create_decoder_stage(self, stage, depth, out_channels, in_channels, skip_channels, num_heads, patch_size, drop_path, mlp_ratio, qkv_bias, qk_scale, attn_drop, proj_drop, pre_norm, enable_rpe, enable_flash, upcast_attention, upcast_softmax):
+        stage = PointSequential()
+        stage.add(
+            SerializedUnpooling(
+                in_channels=in_channels,
+                skip_channels=skip_channels,
+                out_channels=out_channels,
+                norm_layer=self.norm_layers[0],
+                act_layer=self.act_layer,
+            ),
+            name="up",
+        )
+        for i in range(depth):
+            stage.add(
+                Block(
+                    channels=out_channels,
+                    num_heads=num_heads,
+                    patch_size=patch_size,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    qk_scale=qk_scale,
+                    attn_drop=attn_drop,
+                    proj_drop=proj_drop,
+                    drop_path=drop_path[i],
+                    norm_layer=self.norm_layers[1],
+                    act_layer=self.act_layer,
+                    pre_norm=pre_norm,
+                    order_index=i % len(self.order),
+                    cpe_indice_key=f"stage{stage}",
+                    enable_rpe=enable_rpe,
+                    enable_flash=enable_flash,
+                    upcast_attention=upcast_attention,
+                    upcast_softmax=upcast_softmax,
+                ),
+                name=f"block{i}",
+            )
+        return stage
+
+    def forward(self, data_dict):
+        point = Point(data_dict)
+        point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
+        point.sparsify()
+
+        point = self.embedding(point)
+        point = self.enc(point)
+        if not self.cls_mode:
+            point = self.dec(point)
         return point
