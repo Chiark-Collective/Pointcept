@@ -1,8 +1,8 @@
 ###############################################################################################
 # Data directory config.
 ###############################################################################################
-my_data_root = "./data/qh/ppt-testing"
-save_path = 'exp/qh/ppt-testing/semseg-pt-v3m1-1-ppt-extreme' # WARNING: if this dir already exists, Pointcept will fail with a very esoteric error!
+my_data_root = "./data/qh/training_5cm_voxels_2x2x2"
+save_path = 'exp/qh/training_5cm_voxels_2x2x2/semseg-pt-v3m1-1-ppt-extreme' # WARNING: if this dir already exists, Pointcept will fail with a very esoteric error!
 
 ###############################################################################################
 # Job config
@@ -100,6 +100,8 @@ model = dict(
         'S3DIS': ['wall', 'floor', 'chair', 'sofa', 'table', 'door', 'window', 'bookcase', 'ceiling', 'board', 'beam', 'column', 'clutter', 'garbagebin']
     },
     template='[x]',
+    my_new_labels = ['wall', 'floor', 'roof', 'column', 'window', 'chair', 'table', 'countertop', 'desk', 'chimney', 'balluster', 'car', 'stairway', 'grass', 'pavement', 'wall decoration', 'drainage', 'flowers', 'bears', 'tigers'],
+    # ['wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table', 'door', 'window', 'bookshelf', 'picture', 'counter', 'desk', 'curtain', 'refrigerator', 'shower curtain', 'toilet', 'sink', 'bathtub', 'otherfurniture'],
     clip_model='ViT-B/16',
     backbone_mode=False
 )
