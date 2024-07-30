@@ -130,7 +130,7 @@ class PointPromptTraining(nn.Module):
         criteria: Optional[Dict] = None,
         backbone_out_channels: int = 96,
         context_channels: int = 256,
-        dataset_labels: Dict[str, List[str]] = None,
+        dataset_labels: OrderedDict[str, List[str]] = None,
         template: str = "[x]",
         clip_model: str = "ViT-B/16",
         backbone_mode: bool = False,
@@ -145,16 +145,17 @@ class PointPromptTraining(nn.Module):
         self._class_embedding = None
         
         # Create PDNorm factory and inject it into backbone config
-        norm_layer_factory = self.create_pdnorm_factory(pdnorm, dataset_labels.keys())
+        norm_layer_factory = self.create_pdnorm_factory(pdnorm, list(dataset_labels.keys()))
         self.backbone = MODELS.build({**backbone, 'norm_layer_factory': norm_layer_factory})
         
         self.criteria = build_criteria(criteria)
         self.clip_model_string = clip_model
         self.backbone_out_channels = backbone_out_channels
-        # if not self.backbone_mode:
-        #     self._init_clip(clip_model, backbone_out_channels)
         
         # Trigger setter to initialize everything
+        conditions=("Structured3D", "ScanNet", "S3DIS")
+        self.embedding_table = nn.Embedding(len(conditions), context_channels)
+
         self.dataset_labels = dataset_labels
 
     def create_pdnorm_factory(self, pdnorm_config: Dict, conditions: List[str]):
@@ -206,7 +207,7 @@ class PointPromptTraining(nn.Module):
         self._dataset_labels = new_dataset_labels
         if not self.backbone_mode:
             self.update_class_embeddings()
-            self.embedding_table = nn.Embedding(len(new_dataset_labels), self.proj_head.in_features)
+            print(f'self.porj')
 
 
     def update_class_embeddings(self) -> None:

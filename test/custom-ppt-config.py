@@ -92,7 +92,7 @@ model = dict(
             loss_weight=1.0,
             ignore_index=-1)
     ],
-    backbone_out_channels=96,
+    backbone_out_channels=64,
     context_channels=256,
     dataset_labels={
         'Structured3D': ['wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table', 'door', 'window', 'bookshelf', 'picture', 'counter', 'desk', 'shelves', 'curtain', 'dresser', 'pillow', 'mirror', 'ceiling', 'refrigerator', 'television', 'nightstand', 'sink', 'lamp', 'otherstructure', 'otherfurniture', 'otherprop'],
