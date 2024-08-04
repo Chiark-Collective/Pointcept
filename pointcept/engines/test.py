@@ -76,7 +76,11 @@ class TesterBase:
                     if comm.get_world_size() > 1:
                         key = "module." + key  # xxx.xxx -> module.xxx.xxx
                 weight[key] = value
-            model.load_state_dict(weight, strict=True)
+            # for k in weight:
+            #     print(k)
+            print("DITCHING CLASS EMBEDDING")
+            weight.pop("class_embedding")
+            model.load_state_dict(weight, strict=False)
             self.logger.info(
                 "=> Loaded weight '{}' (epoch {})".format(
                     self.cfg.weight, checkpoint["epoch"]
@@ -123,7 +127,7 @@ class SemSegTester(TesterBase):
         union_meter = AverageMeter()
         target_meter = AverageMeter()
         self.model.eval()
-
+        # raise Exception
         save_path = os.path.join(self.cfg.save_path, "result")
         make_dirs(save_path)
         # create submit folder only on main process
