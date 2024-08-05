@@ -132,7 +132,7 @@ class PointPromptTraining(nn.Module):
         backbone_out_channels: int = 64,
         context_channels: int = 256,
         dataset_labels: OrderedDict[str, List[str]] = None,
-        my_new_labels: List[str] = None,
+        categories: List[str] = None,
         template: str = "[x]",
         clip_model: str = "ViT-B/16",
         backbone_mode: bool = False,
@@ -140,56 +140,12 @@ class PointPromptTraining(nn.Module):
     ):
         """Initialize the PointPromptTraining model."""
         super().__init__()
-        # print(dataset_labels)
+
         self.backbone_mode = backbone_mode
         self.template = template
 
         # First we'll insert our new class names as required.
-        self.my_new_labels = my_new_labels
-        class_name = (
-            "wall",
-            "floor",
-            "cabinet",
-            "bed",
-            "chair",
-            "sofa",
-            "table",
-            "door",
-            "window",
-            "bookshelf",
-            "bookcase",
-            "picture",
-            "counter",
-            "desk",
-            "shelves",
-            "curtain",
-            "dresser",
-            "pillow",
-            "mirror",
-            "ceiling",
-            "refrigerator",
-            "television",
-            "shower curtain",
-            "nightstand",
-            "toilet",
-            "sink",
-            "lamp",
-            "bathtub",
-            "garbagebin",
-            "board",
-            "beam",
-            "column",
-            "clutter",
-            "otherstructure",
-            "otherfurniture",
-            "otherprop",
-        )
-        self.class_name = class_name
-        self.class_name, self.valid_indices = self._insert_new_labels()
-        print(self.class_name, self.valid_indices)
-
-        # self._dataset_labels = None
-        # self._class_embedding = None
+        self.categories = categories
 
         # Create PDNorm factory and inject it into backbone config
         norm_layer_factory = self.create_pdnorm_factory(pdnorm, conditions)
@@ -209,7 +165,6 @@ class PointPromptTraining(nn.Module):
         if not self.backbone_mode:
             self.update_class_embeddings()
         self.tag_ = "PPT-v1m3"
-        # self.dataset_labels = dataset_labels
 
     def create_pdnorm_factory(self, pdnorm_config: Dict, conditions: Tuple[str]):
         """Create a factory function for PDNorm layers based on the config."""
@@ -258,38 +213,6 @@ class PointPromptTraining(nn.Module):
 
         return create_pd_norm_layers
 
-    def _insert_new_labels(self):
-        class_name_list = list(self.class_name)
-        updated_class_name = class_name_list[:]
-        new_label_indices = {}
-
-        replaced_indices = set()
-
-        for new_label in self.my_new_labels:
-            if new_label not in class_name_list:
-                for i, label in enumerate(class_name_list):
-                    if label not in self.my_new_labels and i not in replaced_indices:
-                        updated_class_name[i] = new_label
-                        new_label_indices[new_label] = i
-                        replaced_indices.add(i)
-                        break
-            else:
-                new_label_indices[new_label] = class_name_list.index(new_label)
-        print(updated_class_name)
-        return tuple(updated_class_name), list(new_label_indices.values())
-
-    # @property
-    # def dataset_labels(self) -> Dict[str, List[str]]:
-    #     """Get the dataset labels."""
-    #     return self._dataset_labels
-
-    # @dataset_labels.setter
-    # def dataset_labels(self, new_dataset_labels: Dict[str, List[str]]) -> None:
-    #     """Set dataset labels and update related components."""
-    #     self._dataset_labels = new_dataset_labels
-    #     if not self.backbone_mode:
-    #         self.update_class_embeddings()
-
     def update_class_embeddings(self) -> None:
         """Update class embeddings based on current dataset labels."""
         import clip
@@ -305,24 +228,14 @@ class PointPromptTraining(nn.Module):
         print(f"proj_head shape says {self.proj_head}")
         self.logit_scale = clip_model.logit_scale
 
-        # all_classes = list(set(cls for classes in self._dataset_labels.values() for cls in classes))
-        # class_prompt = [self.template.replace("[x]", name) for name in self.class_name]
-        class_prompt = ["wall", "floor"]
-        # class_prompt = self.my_new_labels
+        class_prompt = [self.template.replace("[x]", name) for name in self.categories]
         class_token = clip.tokenize(class_prompt)
         class_embedding = clip_model.encode_text(class_token)
         class_embedding = class_embedding / class_embedding.norm(dim=-1, keepdim=True)
 
-        # Update mappings for class names and dataset-specific valid indices
-        # self.class_name_to_index = {name: idx for idx, name in enumerate(all_classes)}
-        # self.dataset_to_valid_indices = {
-        #     dataset: [self.class_name_to_index[cls] for cls in classes]
-        #     for dataset, classes in self._dataset_labels.items()
-        # }
-
-        # Update class embedding (triggers setter)
-        if "class_embedding" in self._buffers:
-            del self._buffers["class_embedding"]
+        # Update class embedding
+        # if "class_embedding" in self._buffers:
+        #     del self._buffers["class_embedding"]
         self.register_buffer("class_embedding", class_embedding, persistent=True)
 
     def forward(self, data_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -338,7 +251,6 @@ class PointPromptTraining(nn.Module):
         )
         data_dict["context"] = context
 
-        # self.conditions.index(condition)
         # Get features from backbone
         point = self.backbone(data_dict)
         feat = point.feat if isinstance(point, Point) else point
@@ -351,15 +263,9 @@ class PointPromptTraining(nn.Module):
         feat = feat / feat.norm(dim=-1, keepdim=True)
         print(f"{feat.shape=}")
 
-        # valid_indices = self.dataset_to_valid_indices[condition]
         print(f"{self.class_embedding.shape=}")
-        # sim = feat @ self.class_embedding[valid_indices, :].t()
-        # sim = feat @ self.class_embedding[self.valid_indices, :].t()
-        sim = feat @ self.class_embedding.t()
+        sim = feat @ self.class_embedding[:].t()
         print(f"{sim.shape=}")
-
-        # raise ValueError
-        # sim = feat @ self.class_embedding.t()
 
         logit_scale = self.logit_scale.exp()
         seg_logits = logit_scale * sim
@@ -373,11 +279,3 @@ class PointPromptTraining(nn.Module):
             return dict(loss=loss, seg_logits=seg_logits)
         else:
             return dict(seg_logits=seg_logits)
-
-    # def update_dataset_classes(self, dataset_name: str, new_classes: List[str]) -> None:
-    #     """Update classes for a specific dataset."""
-    #     self.dataset_labels = {**self._dataset_labels, dataset_name: new_classes}
-
-    # def add_dataset(self, dataset_name: str, classes: List[str]) -> None:
-    #     """Add a new dataset with its classes."""
-    #     self.dataset_labels = {**self._dataset_labels, dataset_name: classes}

@@ -168,7 +168,7 @@ class SemSegTester(TesterBase):
             segment = data_dict.pop("segment")
             data_name = data_dict.pop("name")
             pred_save_path = os.path.join(save_path, "{}_pred.npy".format(data_name))
-            if os.path.isfile(pred_save_path):
+            if False: # os.path.isfile(pred_save_path):
                 logger.info(
                     "{}/{}: {}, loaded pred and label.".format(
                         idx + 1, len(self.test_loader), data_name
@@ -188,7 +188,9 @@ class SemSegTester(TesterBase):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
                     with torch.no_grad():
-                        pred_part = self.model(input_dict)["seg_logits"]  # (n, k)
+                        pred_part = self.model(input_dict)["seg_logits"]
+                        print(f'{self.model(input_dict)["seg_logits"].shape}=')  # (n, k)
+                        # raise ValueError
                         pred_part = F.softmax(pred_part, -1)
                         if self.cfg.empty_cache:
                             torch.cuda.empty_cache()
@@ -316,6 +318,8 @@ class SemSegTester(TesterBase):
             accuracy_class = intersection / (target + 1e-10)
             mIoU = np.mean(iou_class)
             mAcc = np.mean(accuracy_class)
+            print("Type of intersection:", type(intersection))
+            print("Value of intersection:", intersection)
             allAcc = sum(intersection) / (sum(target) + 1e-10)
 
             logger.info(
