@@ -172,6 +172,7 @@ class PointPromptTraining(nn.Module):
             return None
 
         def create_pd_norm_layers():
+            conditions = ('ScanNet', 'S3DIS', 'Structured3D')
             bn_layer = (
                 partial(
                     PDNorm,
@@ -250,6 +251,8 @@ class PointPromptTraining(nn.Module):
             )
         )
         data_dict["context"] = context
+        print(f"{context.shape}=")
+        # raise ValueError
 
         # Get features from backbone
         point = self.backbone(data_dict)

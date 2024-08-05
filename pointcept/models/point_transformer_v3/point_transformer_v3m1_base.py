@@ -796,6 +796,10 @@ class PointTransformerV3(PointModule):
     def _get_norm_layers(self, norm_layer_factory):
         if norm_layer_factory is not None:
             return norm_layer_factory()
+        print('*'*1000)
+        print("FUCK IT'S GONE PETE TONG")
+        raise ValueError
+
         return partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01), nn.LayerNorm
 
     def _create_embedding(self, in_channels, embed_channels):
