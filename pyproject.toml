@@ -14,7 +14,7 @@ clean-mlflow = "mlflow gc --backend-store-uri sqlite:///mlflow.db"
 jl = "jupyter lab --no-browser --allow-root --ip 0.0.0.0 --port 8888"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "~3.11.9"
 # numpy = "^1.26"
 numpy = "*"
 torch = "^2.2"
