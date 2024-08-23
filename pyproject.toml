@@ -73,6 +73,10 @@ pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64
 python-dotenv = "^1.0.1"
 # flash_attn= "^2.6"
 lora-pytorch = "^0.2.0"
+torchviz = "^0.0.2"
+graphviz = "^0.20.3"
+torchview = "^0.2.6"
+pytora = "^0.0.4"
 
 [tool.poetry.dev-dependencies]
 jupyter="*"
