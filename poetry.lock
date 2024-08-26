@@ -2794,6 +2794,24 @@ files = [
 ]
 
 [[package]]
+name = "minLoRA"
+version = "0.1.0"
+description = "A PyTorch re-implementation of LoRA"
+optional = false
+python-versions = "*"
+files = []
+develop = false
+
+[package.dependencies]
+torch = ">=1.9.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/SlapDrone/minLoRA.git"
+reference = "HEAD"
+resolved_reference = "54fa53646e43cec41bff02bbd04b24957e60879b"
+
+[[package]]
 name = "mistune"
 version = "3.0.2"
 description = "A sane and fast Markdown parser with useful plugins and renderers"
@@ -6553,4 +6571,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "a2d467037634041c38e46a6c1c088fb588248b375326982f7fb0720419af485c"
+content-hash = "56b1b901c9842f4dc9e2a408708fc59af45864b529caf23992a4a3513821ae5b"
