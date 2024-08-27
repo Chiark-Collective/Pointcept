@@ -18,10 +18,15 @@ Needs to be run from the HBIM data root.
 import argparse
 import pdal
 import json
+import glob
 import os
 import re
 import shutil
 import pprint
+import sys
+import laspy
+import torch
+import numpy as np
 
 from pathlib import Path
 
@@ -48,6 +53,76 @@ categories = [
     '12_rwp',
     '13_other',
 ]
+
+
+def las_to_pth(in_f, num_points=None):
+    """This function takes an input .las file and outputs a PyTorch state dictionary that is compatible with
+    Pointcept's data config for HBIM data.
+    """
+    in_f = Path(in_f)
+
+    output_dir = in_f.parent
+
+    with laspy.open(str(in_f)) as file:
+        las = file.read()
+
+        # Determine the number of points to process
+        total_points = len(las.points)
+        if num_points is None:
+            num_points = total_points  # Use all points if num_points is not given
+        max_points = min(num_points, total_points)
+
+        # Set the output filename
+        output_pth_path = in_f.with_suffix('.pth')
+        output_pth_path = output_pth_path.parent / 'pth' / output_pth_path.name
+        if num_points != total_points:
+            output_pth_path = output_pth_path.with_stem(f'{output_pth_path.stem}_n{num_points}')
+        
+        # Read and adjust coordinates to start at zero
+        x_adjusted = las.x[:max_points] - np.min(las.x[:max_points])
+        y_adjusted = las.y[:max_points] - np.min(las.y[:max_points])
+        z_adjusted = las.z[:max_points] - np.min(las.z[:max_points])
+        
+        # Create the coordinate array
+        coord = np.stack((x_adjusted, y_adjusted, z_adjusted), axis=-1).astype(np.float32)
+        
+        # Check if RGB data exists
+        if hasattr(las, 'red') and hasattr(las, 'green') and hasattr(las, 'blue'):
+            color = np.stack((las.red[:max_points], las.green[:max_points], las.blue[:max_points]), axis=-1).astype(np.float32)
+            color /= 256.0  # Normalize color
+        else:
+            raise ValueError(
+                "Error: input cloud does not contain RGB info. This is likely a .las version or \
+                point format mismatch. Check how your .las clouds were saved."
+                )
+
+        # Extract normals if they exist
+        if hasattr(las, 'NormalX') and hasattr(las, 'NormalY') and hasattr(las, 'NormalZ'):
+            normal = np.stack((las.NormalX[:num_points], las.NormalY[:num_points], las.NormalZ[:num_points]), axis=-1)
+            norm = np.linalg.norm(normal, axis=1, keepdims=True)
+            normal = (normal / norm).astype(np.float32)  # Normalize normals
+        else:
+            raise ValueError("Error: missing normals. Check your .las format.")
+
+        # Extract gt if it exists
+        if hasattr(las, 'gt'):
+            gt = las.gt[:num_points].astype(np.int64)
+        else:
+            raise ValueError("Error: input cloud lacks ground truth information.")
+
+        # Save numpy arrays into a dictionary and then to a .pth file
+        data = {
+            'coord': coord,
+            'color': color,
+            'scene_id': output_pth_path.with_suffix(''),
+            'normal': normal,
+            'gt': gt,
+        }
+        
+        # Save the dictionary as a .pth file
+        torch.save(data, output_pth_path)
+        print(f"- saved {max_points} points to {output_pth_path}")
+    return
 
 
 def run_pdal_single_category(label, category, resolution):
@@ -207,9 +282,20 @@ def get_merged_filename(resolution, label):
 
 def merged_file_exists(resolution, label):
     f = get_merged_filename(resolution, label)
-    if Path(f).exists():
-        return True
-    return False
+    return True if Path(f).exists() else False
+
+
+def chipper_files_exist(resolution, label, capacity):
+    f_template = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/{label}_split*.las"
+    split_files = glob.glob(f_template)
+    return True if split_files else False
+
+
+def convert_all_las_to_pth(resolution, label, capacity):
+    f_template = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/{label}_split*.las"
+    split_files = glob.glob(f_template)
+    for f in split_files:
+        las_to_pth(f)
 
 
 if __name__ == '__main__':
@@ -240,8 +326,10 @@ if __name__ == '__main__':
     # Ensure the relevant dirs
     base_dir = f"processed_clouds/resolution_{resolution}/{label}"
     chipper_dir = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}"
+    pth_dir = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/pth"
     os.makedirs(base_dir, exist_ok=True)
     os.makedirs(chipper_dir, exist_ok=True)
+    os.makedirs(pth_dir, exist_ok=True)
 
     if not merged_file_exists(resolution, label):
         # Run the pipelines to create the processed individual clouds
@@ -254,4 +342,14 @@ if __name__ == '__main__':
         print("Merged .las output already exists for this config. Skipping to chipper...")
 
     # Run the chipper pipeline
-    run_chipper_pipeline(label, resolution, capacity)
+    if not chipper_files_exist(resolution, label, capacity):
+        run_chipper_pipeline(label, resolution, capacity)
+    else:
+        print("Chipper output for this config exists, skipping.")
+        
+    # Run the .pth conversions
+    print("Converting split .las files to .pth...")
+    convert_all_las_to_pth(resolution, label, capacity)
+
+    print("Data pipeline complete!")
+    print("-" * 30)  # Separator
