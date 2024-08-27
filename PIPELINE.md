@@ -18,6 +18,8 @@ The first step is to extract this and rename these files to be more Linux-friend
 
 ```bash
 /data/sdd/parametrix $ tree meshes
+```
+```text
 meshes
 ├── brass_foundry.bin
 ├── library.bin
@@ -65,6 +67,9 @@ Once you're finished, it should look like this:
 
 ```bash
 /data/sdd/parametrix $ tree raw_clouds/park_row
+```
+
+```text
 raw_clouds/park_row
 ├── 10_stair.las
 ├── 11_railing.las
@@ -89,6 +94,9 @@ The PDAL pipeline script is located in the Pointcept repo under `./hbim_processi
 
 ```bash
 $ python ~/repos/Pointcept/hbim_processing/process_raw_las.py -h
+```
+
+```text
 usage: process_raw_las.py [-h] [--capacity CAPACITY] dataset resolution
 
 Process point cloud data using PDAL.
@@ -122,6 +130,9 @@ Here's what a sample output looks like for 5cm resolution with Park Row:
 
 ```bash
 /data/sdd/parametrix $ python ~/repos/Pointcept/hbim_processing/process_raw_las.py park_row 0.05
+```
+
+```text
 Configuration Details:
 ------------------------------
 Dataset Tag: park_row
@@ -177,6 +188,9 @@ The script has some limited idempotence, so if you decide that you need a smalle
 
 ```bash
 /data/s/parametrix $ python ~/repos/Pointcept/hbim_processing/process_raw_las.py park_row 0.05 --capacity 1000000
+```
+
+```text
 Configuration Details:
 ------------------------------
 Dataset Tag: park_row
@@ -208,7 +222,7 @@ Data pipeline complete!
 
 At the end of it all, your dir structure should look something like this:
 
-```bash
+```text
 data/sdd/parametrix $ tree
 .
 ├── meshes
