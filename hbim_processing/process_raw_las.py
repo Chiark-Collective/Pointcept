@@ -29,6 +29,7 @@ from pathlib import Path
 VALID_LABELS = [
     'park_row',
     'rog_north',
+    'rog_south',
 ]
 EXTRA_DIMS = "NormalX=float64, NormalY=float64, NormalZ=float64"
 
@@ -114,6 +115,7 @@ def run_all_categories(label, resolution):
 
 def run_merger_pipeline(label, resolution):
     input_files = []
+    output_filename = get_merged_filename(resolution, label)
     for category in categories:       
         fname = f"processed_clouds/resolution_{resolution}/{label}/{category}.las"
         if Path(fname).exists():
@@ -136,7 +138,7 @@ def run_merger_pipeline(label, resolution):
     pl.append(
         {
             "type": "writers.las",
-            "filename": get_merged_filename(resolution, label),
+            "filename": output_filename,
             "forward": "all",
             "extra_dims": "all",
             "minor_version": 4,
