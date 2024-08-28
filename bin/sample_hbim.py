@@ -3,6 +3,7 @@ import os
 import glob
 import argparse
 import sys
+import multiprocessing
 
 def run_cloudcompare_command(command, cloudcompare_path):
     try:
@@ -19,8 +20,15 @@ def run_cloudcompare_command(command, cloudcompare_path):
         print(f"CloudCompare error output:\n{e.stderr}")
         return e.returncode
 
-def process_mesh(mesh_file: str, output_dir: str, density: float, cloudcompare_path: str):
+def process_mesh(mesh_file: str, output_dir: str, density: float, cloudcompare_path: str, use_gpu: bool, max_threads: int):
     base_name = os.path.splitext(os.path.basename(mesh_file))[0]
+    
+    # Prepare acceleration options
+    acceleration_options = []
+    if use_gpu:
+        acceleration_options.append("-USE_GPU")
+    if max_threads > 0:
+        acceleration_options.extend(["-C_MAX_THREADS", str(max_threads)])
     
     # Sample points on mesh
     sampled_file = f"{output_dir}/{base_name}_sampled.bin"
@@ -29,7 +37,7 @@ def process_mesh(mesh_file: str, output_dir: str, density: float, cloudcompare_p
         "-SAMPLE_MESH", "DENSITY", str(density),
         "-C_EXPORT_FMT", "BIN",
         "-SAVE_CLOUDS", "FILE", sampled_file
-    ], cloudcompare_path)
+    ] + acceleration_options, cloudcompare_path)
     
     if result != 0:
         print(f"Error sampling points from {base_name}. Skipping LAS conversion.")
@@ -43,7 +51,7 @@ def process_mesh(mesh_file: str, output_dir: str, density: float, cloudcompare_p
         "-LAS_EXPORT_FORMAT", "1.4",
         "-LAS_EXPORT_POINT_FORMAT", "8",
         "-SAVE_CLOUDS", "FILE", las_file
-    ], cloudcompare_path)
+    ] + acceleration_options, cloudcompare_path)
     
     if result == 0:
         # Clean up temporary file
@@ -58,6 +66,8 @@ def main():
     parser.add_argument("--density", type=float, default=2.0, help="Density for point sampling")
     parser.add_argument("--project-name", help="Specific project to process (omit to process all)")
     parser.add_argument("--cloudcompare-path", default="org.cloudcompare.CloudCompare", help="Flatpak ID for CloudCompare")
+    parser.add_argument("--use-gpu", action="store_true", help="Enable GPU acceleration")
+    parser.add_argument("--max-threads", type=int, default=multiprocessing.cpu_count(), help="Maximum number of threads to use (default: number of CPU cores)")
 
     args = parser.parse_args()
 
@@ -82,7 +92,7 @@ def main():
         os.makedirs(project_output_dir, exist_ok=True)
         
         print(f"Processing {project_name}...")
-        process_mesh(mesh_file, project_output_dir, args.density, args.cloudcompare_path)
+        process_mesh(mesh_file, project_output_dir, args.density, args.cloudcompare_path, args.use_gpu, args.max_threads)
         print(f"Finished processing {project_name}")
 
     print("All processing complete!")
