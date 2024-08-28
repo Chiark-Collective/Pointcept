@@ -29,6 +29,8 @@ import torch
 import numpy as np
 
 from pathlib import Path
+from collections import namedtuple
+
 
 # Constants
 VALID_LABELS = [
@@ -37,8 +39,7 @@ VALID_LABELS = [
     'rog_south',
 ]
 EXTRA_DIMS = "NormalX=float64, NormalY=float64, NormalZ=float64"
-
-categories = [
+CATEGORIES = [
     '1_wall',
     '2_floor',
     '3_roof',
@@ -53,6 +54,15 @@ categories = [
     '12_rwp',
     '13_other',
 ]
+
+
+###############################################################################
+# .las to .pth conversion
+###############################################################################
+def convert_all_las_to_pth(config):
+    split_files = glob.glob(config.split_template)
+    for f in split_files:
+        las_to_pth(f)
 
 
 def las_to_pth(in_f, num_points=None):
@@ -125,6 +135,9 @@ def las_to_pth(in_f, num_points=None):
     return
 
 
+###############################################################################
+# PDAL pipelines
+###############################################################################
 def run_pdal_single_category(label, category, resolution):
     gt_index = int(category.split('_')[0])
     pipeline_json = {
@@ -148,7 +161,7 @@ def run_pdal_single_category(label, category, resolution):
             # Switch Z and Y axes
             {
                 "type": "filters.transformation",
-                "matrix": "1 0 0 0 0 0 1 0 0 1 0 0 0 0 0 1"
+                "matrix": "1 0 0 0 0 0 -1 0 0 1 0 0 0 0 0 1"
             },
             # Add new scalar field called gt
             {
@@ -177,21 +190,21 @@ def run_pdal_single_category(label, category, resolution):
     count = pipeline.execute()
     print(f"   - total points processed: {count}")   
 
-def run_all_categories(label, resolution):
-    for category in categories:
 
+def run_all_categories(label, resolution):
+    for category in CATEGORIES:
         # First check the category file exists, some of the sets are nonexhaustive
         fname = f"raw_clouds/{label}/{category}.las"
         if not Path(fname).exists():
             continue
-
         run_pdal_single_category(label, category, resolution)
 
 
-def run_merger_pipeline(label, resolution):
+def run_merger_pipeline(config):
+    label = config.label
+    resolution = config.resolution
     input_files = []
-    output_filename = get_merged_filename(resolution, label)
-    for category in categories:       
+    for category in CATEGORIES:       
         fname = f"processed_clouds/resolution_{resolution}/{label}/{category}.las"
         if Path(fname).exists():
             input_files.append(fname)
@@ -213,7 +226,7 @@ def run_merger_pipeline(label, resolution):
     pl.append(
         {
             "type": "writers.las",
-            "filename": output_filename,
+            "filename": config.merged_filename,
             "forward": "all",
             "extra_dims": "all",
             "minor_version": 4,
@@ -228,28 +241,28 @@ def run_merger_pipeline(label, resolution):
     print("Merging categories...")
     count = pipeline.execute()
     print(f"Total points processed: {count}")
-    print(f"Created merged file: {output_filename}")
+    print(f"Created merged file: {config.merged_filename}")
     print(f"Removing intermediate split category .las files.")
     for f in input_files:
         os.remove(f)
 
 
-def run_chipper_pipeline(label, resolution, capacity):
+def run_scene_chipper_pipeline(config):
+    """Run the initial chipper to create test/train/val scene splits."""
     pipeline_json = {
         "pipeline": [
-            # Read the .las
             {
                 "type": "readers.las",
-                "filename": get_merged_filename(resolution, label),
+                "filename": config.merged_filename,
                 "extra_dims": EXTRA_DIMS
             },
             {
                 "type": "filters.chipper",
-                "capacity": capacity
+                "capacity": config.scene_capacity
             },
             {
                 "type": "writers.las",
-                "filename": f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/{label}_split#.las",
+                "filename": config.scene_template,
                 "forward": "all",
                 "extra_dims": "all",
                 "minor_version": 4,
@@ -258,44 +271,87 @@ def run_chipper_pipeline(label, resolution, capacity):
         ]
     }
     pipeline = pdal.Pipeline(json.dumps(pipeline_json))
-    print(f"Running chipper with capacity={capacity}...")
+    print(f"Running train/test/val scene chipper with capacity={config.scene_capacity}...")
     count = pipeline.execute()
+
+    # Count number of outputs
     file_count = 0
-    # Walk through all directories and files in directory_path
-    chipper_dir = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}"
-    for root, dirs, files in os.walk(chipper_dir):
-        file_count += len(files)  # Add count of files in this directory
+    for root, dirs, files in os.walk(config.scene_dir):
+        file_count += len(files)
     print(f" - chipper created {file_count} splits.")
 
 
+def run_file_chipper_pipeline(config):
+    """Run the chipper to split each scene split into manageable filesizes for Pointcept."""
+    base_dir = config.scene_dir
+    base_dir = Path(base_dir)
+    f_template = base_dir / "scene*.las"
+    scene_files = glob.glob(str(f_template))
+
+    for f in scene_files:
+
+        path = Path(f)
+        template = config.split_dir + f"{path.stem}_split#.las"
+        pipeline_json = {
+            "pipeline": [
+                # Read the .las
+                {
+                    "type": "readers.las",
+                    "filename": f,
+                    "extra_dims": EXTRA_DIMS
+                },
+                {
+                    "type": "filters.chipper",
+                    "capacity": config.file_capacity
+                },
+                {
+                    "type": "writers.las",
+                    "filename": str(template),
+                    "forward": "all",
+                    "extra_dims": "all",
+                    "minor_version": 4,
+                    "dataformat_id": 8
+                }   
+            ]
+        }
+        pipeline = pdal.Pipeline(json.dumps(pipeline_json))
+        print(f" - running {path.stem} chipper with capacity={file_capacity}...")
+        count = pipeline.execute()
+        file_count = 0
+
+    # Walk through all directories and files in directory_path
+    for root, dirs, files in os.walk(config.split_dir):
+        file_count += len(files)  # Add count of files in this directory
+    print(f" - chipper created {file_count} splits across all scenes.")
+
+
+def scene_files_exist(config):
+    # Replace the # char in the pdal template with * for glob
+    template = config.scene_template.replace('#', '*')
+    scene_files = glob.glob(template)
+    return True if scene_files else False
+
+
+###############################################################################
+# Arg parser and main script
+###############################################################################
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Process point cloud data using PDAL.")
     parser.add_argument("dataset", type=str, help="The dataset tag to process, e.g., 'park_row'")
     parser.add_argument("resolution", type=float, help="The resolution to use in subsampling.")
-    parser.add_argument("--capacity", type=int, default=2400000, help="The capacity for each train/test split, default is 2.4 million.")
+    parser.add_argument(
+        "--file-capacity", type=int, default=500000,
+        help="The point capacity for each file used as input to Pointcept, default is 500k."
+        )
+    parser.add_argument(
+        "--scene-capacity", type=int, default=2400000,
+        help="The point capacity for each file train/test/val scene, default is 2.4 million."
+    )
+    parser.add_argument(
+        '--merger-only', action='store_true', default=False,
+        help='Enable merger only mode (default: %(default)s)'
+    )
     return parser.parse_args()
-
-
-def get_merged_filename(resolution, label):
-    return f"processed_clouds/resolution_{resolution}/{label}/{label}_merged.las"
-
-
-def merged_file_exists(resolution, label):
-    f = get_merged_filename(resolution, label)
-    return True if Path(f).exists() else False
-
-
-def chipper_files_exist(resolution, label, capacity):
-    f_template = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/{label}_split*.las"
-    split_files = glob.glob(f_template)
-    return True if split_files else False
-
-
-def convert_all_las_to_pth(resolution, label, capacity):
-    f_template = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/{label}_split*.las"
-    split_files = glob.glob(f_template)
-    for f in split_files:
-        las_to_pth(f)
 
 
 if __name__ == '__main__':
@@ -309,47 +365,68 @@ if __name__ == '__main__':
     resolution = args.resolution
     if not isinstance(resolution, float):
         raise ValueError(f"Provided resolution {resolution} is not a float.")
-    if resolution < 0.01:
+    if resolution < 0.005:
         raise ValueError(f"The requested resolution {resolution} is too fine for the pre-sampling.")
 
-    capacity = args.capacity
-    if not isinstance(capacity, int):
-        raise ValueError(f"Provided capacity: {capacity} must be an integer.")
+    scene_capacity = args.scene_capacity
+    if not isinstance(scene_capacity, int):
+        raise ValueError(f"Provided scene_capacity: {scene_capacity} must be an integer.")
 
-    print("\033[1mConfiguration Details:\033[0m")  # Bold header
-    print("-" * 30)  # Separator
-    print(f"\033[1mDataset Tag:\033[0m \033[94m{args.dataset}\033[0m")  # Bold key, blue value
-    print(f"\033[1mResolution:\033[0m \033[94m{args.resolution}\033[0m")
-    print(f"\033[1mCapacity:\033[0m \033[94m{args.capacity}\033[0m")
-    print("-" * 30)  # Footer separator
+    file_capacity = args.file_capacity
+    if not isinstance(file_capacity, int):
+        raise ValueError(f"Provided file_capacity: {file_capacity} must be an integer.")
     
-    # Ensure the relevant dirs
-    base_dir = f"processed_clouds/resolution_{resolution}/{label}"
-    chipper_dir = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}"
-    pth_dir = f"processed_clouds/resolution_{resolution}/{label}/chipper_{capacity}/pth"
-    os.makedirs(base_dir, exist_ok=True)
-    os.makedirs(chipper_dir, exist_ok=True)
-    os.makedirs(pth_dir, exist_ok=True)
+    # Generate a config struct to be passed as arg.
+    MyConfig = namedtuple("MyConfig", [
+        "label", "resolution", "scene_capacity", "file_capacity",
+        "base_dir", "merged_filename", "scene_dir", "scene_template", "split_dir", "split_template",
+        "pth_dir"
+    ])
+    scene_dir = f"processed_clouds/resolution_{resolution}/{label}/scene_capacity_{scene_capacity}/"
+    config = MyConfig(
+        label = label, resolution=resolution, scene_capacity=scene_capacity, file_capacity=file_capacity,
+        base_dir = f"processed_clouds/resolution_{resolution}/{label}",
+        merged_filename = f"processed_clouds/resolution_{resolution}/{label}/{label}_merged.las",
+        scene_dir = scene_dir,
+        scene_template = scene_dir + "scene#.las",  # for PDAL
+        split_dir = scene_dir + f'file_capacity_{file_capacity}/',
+        split_template = scene_dir + f'file_capacity_{file_capacity}/scene*_split*.las',  # for glob
+        pth_dir = scene_dir + f'file_capacity_{file_capacity}/pth/',
+    )
 
-    if not merged_file_exists(resolution, label):
-        # Run the pipelines to create the processed individual clouds
+    # Print the config to the terminal with formatting for alignment
+    max_field_length = max(len(field) for field in MyConfig._fields) + 1
+    print("\033[1mConfiguration Details:\033[0m")
+    print("-" * 30)
+    for field in MyConfig._fields:
+        field_name_formatted = field.replace('_', ' ').title().ljust(max_field_length)
+        print(f"\033[1m{field_name_formatted}:\033[0m \033[94m{getattr(config, field)}\033[0m")
+    print("-" * 30)
+
+    # Ensure the relevant dirs
+    os.makedirs(config.scene_dir, exist_ok=True)
+    os.makedirs(config.pth_dir, exist_ok=True)
+
+    # If necessary, run sampling correction and merging.
+    if not Path(config.merged_filename).exists():
         print("Subsampling individual category clouds.")
         run_all_categories(label, resolution)
-
-        # Run the pipeline to merge the clouds
-        run_merger_pipeline(label, resolution)
+        run_merger_pipeline(config)
     else:
-        print("Merged .las output already exists for this config. Skipping to chipper...")
+        print(f"Merged .las output already exists for {label} at this resolution.")
+    if args.merger_only:
+        print("Merger only mode enabled, exiting now.")
+        sys.exit()
 
-    # Run the chipper pipeline
-    if not chipper_files_exist(resolution, label, capacity):
-        run_chipper_pipeline(label, resolution, capacity)
+    # If necessary, run the scene splitter
+    if not scene_files_exist(config):
+        run_scene_chipper_pipeline(config)
     else:
-        print("Chipper output for this config exists, skipping.")
-        
-    # Run the .pth conversions
-    print("Converting split .las files to .pth...")
-    convert_all_las_to_pth(resolution, label, capacity)
+        print("Scene files exist for this scene capacity. Skipping to file chipper...")
+
+    # Run the file splitter and .pth conversion
+    run_file_chipper_pipeline(config)
+    convert_all_las_to_pth(config)
 
     print("Data pipeline complete!")
-    print("-" * 30)  # Separator
+    print("-" * 30)
