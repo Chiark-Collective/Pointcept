@@ -1,0 +1,19 @@
+[
+  {
+    "type": "readers.las",
+    "filename": "{{ input_file }}",
+    "extra_dims": "{{ extra_dims }}"
+  },
+  {
+    "type": "filters.chipper",
+    "capacity": "{{ capacity }}"
+  },
+  {
+    "type": "writers.las",
+    "filename": "{{ output_template }}",
+    "forward": "all",
+    "extra_dims": "all",
+    "minor_version": 4,
+    "dataformat_id": 8
+  }
+]
