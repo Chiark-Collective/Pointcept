@@ -5,7 +5,7 @@ import sys
 import logging
 from pathlib import Path
 from collections import namedtuple
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Callable
 
 import laspy
 import torch
@@ -13,11 +13,9 @@ import numpy as np
 
 from pdal_runner import PDALPipelineRunner, PDALException
 
-
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 
 # Constants
 VALID_LABELS = [
@@ -36,95 +34,19 @@ Config = namedtuple("Config", [
     "pth_dir"
 ])
 
-
 class TemplateError(Exception):
     """Custom exception for template-related errors."""
     pass
 
-
-def convert_all_las_to_pth(config: Config) -> None:
-    """
-    Convert all LAS files to PTH format.
-
-    Args:
-        config (Config): Configuration object containing file paths and settings.
-    """
-    split_files = glob.glob(str(config.split_template))
-    for f in split_files:
-        las_to_pth(f)
-
-
-def las_to_pth(in_f: str, num_points: Optional[int] = None) -> None:
-    """
-    Convert a single LAS file to PTH format.
-
-    Args:
-        in_f (str): Input LAS file path.
-        num_points (Optional[int]): Number of points to process. If None, process all points.
-    """
-    in_f = Path(in_f)
-    output_dir = in_f.parent
-
-    with laspy.open(str(in_f)) as file:
-        las = file.read()
-
-        total_points = len(las.points)
-        if num_points is None:
-            num_points = total_points
-        max_points = min(num_points, total_points)
-
-        output_pth_path = in_f.with_suffix('.pth')
-        output_pth_path = output_pth_path.parent / 'pth' / output_pth_path.name
-        if num_points != total_points:
-            output_pth_path = output_pth_path.with_stem(f'{output_pth_path.stem}_n{num_points}')
-
-        coord = np.stack((
-            las.x[:max_points] - np.min(las.x[:max_points]),
-            las.y[:max_points] - np.min(las.y[:max_points]),
-            las.z[:max_points] - np.min(las.z[:max_points])
-        ), axis=-1).astype(np.float32)
-
-        if hasattr(las, 'red') and hasattr(las, 'green') and hasattr(las, 'blue'):
-            color = np.stack((las.red[:max_points], las.green[:max_points], las.blue[:max_points]), axis=-1).astype(np.float32) / 256.0
-        else:
-            raise ValueError("Error: input cloud does not contain RGB info.")
-
-        if hasattr(las, 'NormalX') and hasattr(las, 'NormalY') and hasattr(las, 'NormalZ'):
-            normal = np.stack((las.NormalX[:num_points], las.NormalY[:num_points], las.NormalZ[:num_points]), axis=-1)
-            norm = np.linalg.norm(normal, axis=1, keepdims=True)
-            normal = (normal / norm).astype(np.float32)
-        else:
-            raise ValueError("Error: missing normals. Check your .las format.")
-
-        if hasattr(las, 'gt'):
-            gt = las.gt[:num_points].astype(np.int64)
-        else:
-            raise ValueError("Error: input cloud lacks ground truth information.")
-
-        data = {
-            'coord': coord,
-            'color': color,
-            'scene_id': output_pth_path.with_suffix(''),
-            'normal': normal,
-            'gt': gt,
-        }
-
-        torch.save(data, output_pth_path)
-        logger.info(f"Saved {max_points} points to {output_pth_path}")
-
-
 def run_pdal_pipeline(template_name: str, config: Config, parameters: dict) -> Optional[Path]:
     """
     Run a PDAL pipeline using a specified template.
-
     Args:
         template_name (str): Name of the template file.
         config (Config): Configuration object containing file paths and settings.
         parameters (dict): Parameters to pass to the PDAL pipeline.
-
     Returns:
         Optional[Path]: Path to the output file if successful, None otherwise.
-
     Raises:
         TemplateError: If the template file does not exist.
     """
@@ -142,11 +64,9 @@ def run_pdal_pipeline(template_name: str, config: Config, parameters: dict) -> O
         logger.error(f"Error running pipeline with template {template_name}: {e}")
         return None
 
-
 def run_all_categories(config: Config) -> None:
     """
     Process all categories of point cloud data.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
     """
@@ -165,11 +85,9 @@ def run_all_categories(config: Config) -> None:
         }
         run_pdal_pipeline("process_category.json", config, parameters)
 
-
 def run_merger_pipeline(config: Config) -> None:
     """
     Merge processed category files into a single file.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
     """
@@ -188,17 +106,14 @@ def run_merger_pipeline(config: Config) -> None:
             os.remove(f)
         logger.info("Removed intermediate split category .las files")
 
-
 def run_chipper_pipeline(config: Config, input_file: Path, output_template: str, capacity: int) -> Optional[Path]:
     """
     Run the chipper pipeline to split point cloud data.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
         input_file (Path): Input file path.
         output_template (str): Output file template.
         capacity (int): Capacity for each output file.
-
     Returns:
         Optional[Path]: Path to the output file if successful, None otherwise.
     """
@@ -211,11 +126,9 @@ def run_chipper_pipeline(config: Config, input_file: Path, output_template: str,
     
     return run_pdal_pipeline("chipper.json", config, parameters)
 
-
 def run_scene_chipper_pipeline(config: Config) -> None:
     """
     Run the scene chipper pipeline to split the merged file into scenes.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
     """
@@ -224,11 +137,9 @@ def run_scene_chipper_pipeline(config: Config) -> None:
         file_count = len(list(config.scene_dir.glob('*.las')))
         logger.info(f"Scene chipper created {file_count} splits.")
 
-
 def run_file_chipper_pipeline(config: Config) -> None:
     """
     Run the file chipper pipeline to further split scene files.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
     """
@@ -241,14 +152,11 @@ def run_file_chipper_pipeline(config: Config) -> None:
     file_count = len(list(config.split_dir.glob('*.las')))
     logger.info(f"File chipper created {file_count} splits across all scenes.")
 
-
 def scene_files_exist(config: Config) -> bool:
     """
     Check if scene files already exist.
-
     Args:
         config (Config): Configuration object containing file paths and settings.
-
     Returns:
         bool: True if scene files exist, False otherwise.
     """
@@ -256,10 +164,106 @@ def scene_files_exist(config: Config) -> bool:
     return len(scene_files) > 0
 
 
+def chunked_las_to_pth(in_f: str, chunk_size: int = 1000000, num_points: Optional[int] = None) -> None:
+    """
+    Convert a single LAS file to PTH format using chunked reading for memory efficiency.
+    Args:
+        in_f (str): Input LAS file path.
+        chunk_size (int): Number of points to process in each chunk.
+        num_points (Optional[int]): Total number of points to process. If None, process all points.
+    """
+    in_f = Path(in_f)
+    output_pth_path = in_f.with_suffix('.pth')
+    output_pth_path = output_pth_path.parent / 'pth' / output_pth_path.name
+    if num_points is not None:
+        output_pth_path = output_pth_path.with_stem(f'{output_pth_path.stem}_n{num_points}')
+
+    logger.info(f"Processing file: {in_f}")
+    logger.info(f"Output will be saved to: {output_pth_path}")
+
+    with laspy.open(str(in_f)) as file:
+        total_points = file.header.point_count
+        max_points = min(num_points or total_points, total_points)
+        logger.info(f"Total points in file: {total_points}")
+        logger.info(f"Points to be processed: {max_points}")
+
+        # Initialize file objects for each attribute
+        coord_file = open(output_pth_path.with_name(f"{output_pth_path.stem}_coord.tmp"), 'wb')
+        color_file = open(output_pth_path.with_name(f"{output_pth_path.stem}_color.tmp"), 'wb')
+        normal_file = open(output_pth_path.with_name(f"{output_pth_path.stem}_normal.tmp"), 'wb')
+        gt_file = open(output_pth_path.with_name(f"{output_pth_path.stem}_gt.tmp"), 'wb')
+
+        processed_points = 0
+        for i, points in enumerate(file.chunk_iterator(chunk_size)):
+            if processed_points >= max_points:
+                break
+
+            logger.info(f"Processing chunk {i+1}")
+            
+            chunk_size = min(len(points), max_points - processed_points)
+            
+            coord = np.stack((
+                points.x[:chunk_size] - np.min(points.x[:chunk_size]),
+                points.y[:chunk_size] - np.min(points.y[:chunk_size]),
+                points.z[:chunk_size] - np.min(points.z[:chunk_size])
+            ), axis=-1).astype(np.float32)
+
+            color = np.stack((points.red[:chunk_size], points.green[:chunk_size], points.blue[:chunk_size]), axis=-1).astype(np.float32) / 256.0
+
+            normal = np.stack((points.NormalX[:chunk_size], points.NormalY[:chunk_size], points.NormalZ[:chunk_size]), axis=-1)
+            norm = np.linalg.norm(normal, axis=1, keepdims=True)
+            normal = (normal / norm).astype(np.float32)
+
+            gt = points.gt[:chunk_size].astype(np.int64)
+
+            # Write chunk data to temporary files
+            coord_file.write(coord.tobytes())
+            color_file.write(color.tobytes())
+            normal_file.write(normal.tobytes())
+            gt_file.write(gt.tobytes())
+
+            processed_points += chunk_size
+            logger.info(f"Processed {processed_points} points so far")
+
+        # Close temporary files
+        coord_file.close()
+        color_file.close()
+        normal_file.close()
+        gt_file.close()
+
+        logger.info("Creating final PTH file...")
+        
+        # Read data back from temporary files and create tensors
+        data = {
+            'coord': torch.from_numpy(np.fromfile(coord_file.name, dtype=np.float32).reshape(-1, 3)),
+            'color': torch.from_numpy(np.fromfile(color_file.name, dtype=np.float32).reshape(-1, 3)),
+            'normal': torch.from_numpy(np.fromfile(normal_file.name, dtype=np.float32).reshape(-1, 3)),
+            'gt': torch.from_numpy(np.fromfile(gt_file.name, dtype=np.int64)),
+            'scene_id': output_pth_path.with_suffix('')
+        }
+
+        # Save the final PTH file
+        torch.save(data, output_pth_path)
+        logger.info(f"Saved {processed_points} points to {output_pth_path}")
+
+        # Clean up temporary files
+        for tmp_file in [coord_file.name, color_file.name, normal_file.name, gt_file.name]:
+            Path(tmp_file).unlink()
+        logger.info("Cleaned up temporary files")
+
+def convert_all_las_to_pth(config: Config) -> None:
+    """
+    Convert all LAS files to PTH format.
+    Args:
+        config (Config): Configuration object containing file paths and settings.
+    """
+    split_files = glob.glob(str(config.split_template))
+    for f in split_files:
+        chunked_las_to_pth(f, chunk_size=config.file_capacity)
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments.
-
     Returns:
         argparse.Namespace: Parsed arguments.
     """
@@ -284,17 +288,13 @@ def parse_arguments() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
 def create_config(args: argparse.Namespace) -> Config:
     """
     Create a Config object from parsed arguments.
-
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
-
     Returns:
         Config: Configuration object.
-
     Raises:
         ValueError: If invalid arguments are provided.
     """
@@ -327,7 +327,6 @@ def create_config(args: argparse.Namespace) -> Config:
         split_template=str(scene_dir / f'file_capacity_{args.file_capacity}/scene*_split*.las'),
         pth_dir=scene_dir / f'file_capacity_{args.file_capacity}/pth',
     )
-
 
 def main() -> None:
     """
@@ -363,6 +362,8 @@ def main() -> None:
             logger.info("Scene files exist for this scene capacity. Skipping to file chipper...")
 
         run_file_chipper_pipeline(config)
+
+        logger.info("Converting split LAS files to PTH format using chunked processing.")
         convert_all_las_to_pth(config)
 
         logger.info("Data pipeline complete!")
