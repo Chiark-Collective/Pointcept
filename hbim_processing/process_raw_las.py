@@ -341,8 +341,7 @@ def main() -> None:
     logger.info(f"Scene capacity: {config.scene_capacity}")
     logger.info(f"File capacity: {config.file_capacity}")
 
-    os.makedirs(config.scene_dir, exist_ok=True)
-    os.makedirs(config.pth_dir, exist_ok=True)
+    os.makedirs(config.base_dir, exist_ok=True)
 
     try:
         if not config.merged_filename.exists():
@@ -356,6 +355,8 @@ def main() -> None:
             logger.info("Merger only mode enabled, exiting now.")
             return
 
+        os.makedirs(config.scene_dir, exist_ok=True)
+        os.makedirs(config.pth_dir, exist_ok=True)
         if not scene_files_exist(config):
             run_scene_chipper_pipeline(config)
         else:
