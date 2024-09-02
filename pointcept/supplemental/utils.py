@@ -178,6 +178,51 @@ def read_las_file(file_path):
         print(f"  - Sample intensity values: {intensity[:10]}")
         print(f"  - Sample classifications: {classifications[:10]}")
 
+def read_las_file2(file_path):
+    """
+    Reads and prints key information from a LAS file, including metadata, header details, and a sample of point data,
+    with additional handling for normals and ground truth scalar fields if present.
+    
+    Parameters:
+        file_path (str): The path to the LAS file to be read.
+    
+    Returns:
+        None: Outputs directly to the console.
+    """
+    with laspy.open(file_path) as file:
+        header = file.header
+
+        # Print file version and general header information
+        print(f"LAS File Version: {header.version}")
+        if hasattr(header, 'file_signature'):
+            print(f"File Signature: {header.file_signature}")
+        print(f"Point Format: {header.point_format}")
+        print(f"Number of Point Records: {header.point_count}")
+        print(f"Number of Points by Return: {header.number_of_points_by_return}")
+        
+        if hasattr(header, 'bounds'):
+            print(f"Bounding Box: {header.bounds}\n")
+        else:
+            print("Bounding Box: Not available\n")
+
+        # Print initial point format details
+        points = next(file.chunk_iterator(1))
+        print("Point Format Details:")
+        print(f"  - Dimension names: {', '.join(points.point_format.dimension_names)}")
+        print(f"  - Extra dimension names: {', '.join(points.point_format.extra_dimension_names)}")
+        print(f"  - Point size in bytes: {points.point_size}\n")
+
+        # Read the entire file
+        las = file.read()
+
+        # Accessing and printing specific data dimensions
+        print("Sample Data Points:")
+        sample_count = 10  # Define how many samples to show
+        for name in ["x", "y", "z", "red", "intensity", "classification", "gt", "NormalX", "NormalY", "NormalZ"]:
+            if hasattr(las, name):
+                print(f"  - Sample {name.capitalize()} values: {getattr(las, name)[:sample_count]}")
+
+
 
 if __name__ == "__main__":
     fp = '/data/sdd/training_v2.las'

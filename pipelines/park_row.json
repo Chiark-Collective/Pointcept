@@ -1,0 +1,22 @@
+{
+    "pipeline": [
+      {
+        "type": "readers.las",
+        "filename": "park_row.las",
+        "extra_dims": "gt=uint8, NormalX=float64, NormalY=float64, NormalZ=float64"
+      },
+      {
+        "type": "filters.chipper",
+        "capacity": 2400000
+      },
+      {
+        "type": "writers.las",
+        "filename": "park_row_split#.las",
+        "forward": "all",
+        "extra_dims": "all",
+        "minor_version": 4,
+        "dataformat_id": 8
+      }
+    ]
+  }
+  

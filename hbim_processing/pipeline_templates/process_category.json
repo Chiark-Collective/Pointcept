@@ -1,0 +1,35 @@
+[
+  {
+    "type": "readers.las",
+    "filename": "{{ input_file }}",
+    "extra_dims": "{{ extra_dims }}"
+  },
+  {
+    "type": "filters.voxelcenternearestneighbor",
+    "cell": "{{ resolution }}"
+  },
+  {
+    "type": "filters.transformation",
+    "matrix": "0.01  0  0  0  0  0.01  0  0  0  0  0.01  0  0  0  0  1"
+  },
+  {
+    "type": "filters.transformation",
+    "matrix": "1 0 0 0 0 0 -1 0 0 1 0 0 0 0 0 1"
+  },
+  {
+    "type": "filters.ferry",
+    "dimensions": "=>gt"
+  },
+  {
+    "type": "filters.assign",
+    "assignment": "gt[:]={{ gt_index }}"
+  },
+  {
+    "type": "writers.las",
+    "filename": "{{ output_file }}",
+    "forward": "all",
+    "extra_dims": "all",
+    "minor_version": 4,
+    "dataformat_id": 8
+  }
+]
