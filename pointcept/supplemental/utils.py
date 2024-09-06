@@ -9,6 +9,29 @@ import pandas as pd
 from dotenv import load_dotenv
 
 
+_current_label = 'v1'
+_category_dict = {
+    'v1': [
+        "1_WALL",
+        "2_FLOOR",
+        "3_ROOF",
+        "4_CEILING",
+        "5_FOOTPATH",
+        "6_GRASS",
+        "7_COLUMN",
+        "8_DOOR",
+        "9_WINDOW",
+        "10_STAIR",
+        "11_RAILING",
+        "12_RWP",
+        "13_OTHER",
+        ],
+}
+
+def get_category_list(label=_current_label):
+    return _category_dict[label]
+
+
 def in_docker():
     """
     Check if the code is running inside a Docker container managed by the Pointcept project.
