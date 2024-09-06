@@ -506,3 +506,44 @@ class ParametrixPreprocessor():
             handle.set_alpha(1)  # Set alpha to 1 for legend handles to show full color
 
         plt.show()
+        return scatter
+
+    def evaluate_binning(self, pcd_dict, num_bins_x=None, num_bins_y=None):
+        """
+        Evaluates a binning schema for a dictionary of Open3D point clouds using AABB from meshes for histogram limits,
+        with evenly spaced bins in x and y. Defaults to creating bins approximately 8 units in size when not specified.
+
+        Args:
+            pcd_dict (dict): Dictionary where each key is a category and each value is an Open3D point cloud.
+            num_bins_x (int): Optional. Number of bins to use in x dimension.
+            num_bins_y (int): Optional. Number of bins to use in y dimension.
+
+        Returns:
+            dict: A dictionary with keys as categories and values as a 2D array of counts per bin.
+        """
+        # Use the AABB from all meshes to define the bin limits
+        aabb = self.get_aabb_all_meshes()
+        min_pt = aabb['min']
+        max_pt = aabb['max']
+
+        # Desired size of each bin in terms of units (approximately 8x8 units if not specified)
+        desired_bin_size = 8
+
+        # Compute default number of bins if not specified
+        if num_bins_x is None:
+            num_bins_x = max(1, int(np.round((max_pt[0] - min_pt[0]) / desired_bin_size)))
+        if num_bins_y is None:
+            num_bins_y = max(1, int(np.round((max_pt[1] - min_pt[1]) / desired_bin_size)))
+        logger.info(f"Binning is using {num_bins_x} bins in X, and {num_bins_y} bins in Y.")
+        # Create bin edges based on the AABB
+        x_edges = np.linspace(min_pt[0], max_pt[0], num_bins_x + 1)
+        y_edges = np.linspace(min_pt[1], max_pt[1], num_bins_y + 1)
+
+        # Evaluate binning for each point cloud
+        bin_counts = {}
+        for category, pcd in pcd_dict.items():
+            points = np.asarray(pcd.points)
+            hist, _, _ = np.histogram2d(points[:, 0], points[:, 1], bins=(x_edges, y_edges))
+            bin_counts[category] = hist
+
+        return bin_counts
