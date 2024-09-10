@@ -145,7 +145,6 @@ class PointPromptTrainingLoRA(nn.Module):
         self,
         base_model_config: Path,
         lora_config: dict,
-        freeze_config: dict,
         new_conditions: list[str] = ["Heritage"],
         condition_mapping: dict[str, str | None] | None = {"Heritage": "ScanNet"},
         device: str = "cuda",
@@ -154,7 +153,6 @@ class PointPromptTrainingLoRA(nn.Module):
         super().__init__()
         self.base_model_config = base_model_config
         self.lora_config = lora_config
-        self.freeze_config = freeze_config
         self.new_conditions = new_conditions
         self.condition_mapping = condition_mapping
         self.device = device

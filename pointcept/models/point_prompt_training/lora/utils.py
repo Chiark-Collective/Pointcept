@@ -95,7 +95,7 @@ def is_lora(name: str, value: nn.Parameter) -> bool:
 def filter_named_params(
     model: nn.Module,
     filter_fn: ty.Callable[[str, nn.Parameter], bool] | None
-) -> ty.Generator[tuple[str, nn.Parameter]]:
+) -> ty.Generator[tuple[str, nn.Parameter], ty.Any, ty.Any]:
     """
     generator which returns (parameter_name, weight tensor)
     for all tensors whose names match the filter function
