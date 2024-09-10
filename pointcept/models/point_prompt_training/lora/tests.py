@@ -43,8 +43,9 @@ def test_ppt_model_expansion(
     
     # Setup
     original_conditions = model.conditions
-    logger.info(f"{original_conditions=}")
-    logger.info(f"{new_conditions=}")
+    n_expected_conditions = len(set(original_conditions).union(new_conditions))
+    logger.debug(f"{original_conditions=}")
+    logger.debug(f"{new_conditions=}")
     
     # Store original embedding weights
     original_embedding_weights = model.embedding_table.weight.clone()
@@ -53,6 +54,7 @@ def test_ppt_model_expansion(
     expanded_model = expand_ppt_model_conditions(model, new_conditions, condition_mapping)
     expanded_model = expanded_model.to(device)
     
+    expanded_conditions = expanded_model.conditions
     # Helper function to check if tensors are close
     def tensors_close(a, b, rtol=1e-5, atol=1e-8):
         return torch.allclose(a.to(device), b.to(device), rtol=rtol, atol=atol)
@@ -73,7 +75,7 @@ def test_ppt_model_expansion(
         for name, child in module.named_children():
             full_name = f"{prefix}.{name}" if prefix else name
             if isinstance(child, PDNorm):
-                assert len(child.norm) == len(original_conditions) + len(new_conditions), f"PDNorm {full_name} size mismatch"
+                assert len(child.norm) == n_expected_conditions, f"PDNorm {full_name} size mismatch"
                 
                 # Get the corresponding PDNorm from the original model
                 original_pdnorm = model
@@ -87,10 +89,13 @@ def test_ppt_model_expansion(
                     assert child.norm[i].eps == original_pdnorm.norm[i].eps, f"Eps mismatch for {condition} in {full_name}"
                 
                 # Check parameters of new conditions
-                scannet_idx = original_conditions.index("ScanNet")
-                new_dataset1_idx = len(original_conditions)
-                new_dataset2_idx = len(original_conditions) + 1
-                
+                # scannet_idx = original_conditions.index("ScanNet")
+                # new_dataset1_idx = len(original_conditions)
+                # new_dataset2_idx = len(original_conditions) + 1
+                scannet_idx = expanded_conditions.index("ScanNet")
+                new_dataset1_idx = expanded_conditions.index("NewDataset1")
+                new_dataset2_idx = expanded_conditions.index("NewDataset2")                
+
                 # NewDataset1 should be copied from ScanNet
                 if not tensors_close(child.norm[new_dataset1_idx].weight, child.norm[scannet_idx].weight):
                     logger.info(f"NewDataset1 weight: {child.norm[new_dataset1_idx].weight}")
@@ -103,7 +108,12 @@ def test_ppt_model_expansion(
                     raise AssertionError(f"NewDataset1 bias not copied correctly in {full_name}")
                 
                 # NewDataset2 should be randomly initialized
-                assert not tensors_close(child.norm[new_dataset2_idx].weight, child.norm[scannet_idx].weight, rtol=1e-3, atol=1e-3), f"NewDataset2 weight should not match ScanNet in {full_name}"
+                assert not tensors_close(
+                    child.norm[new_dataset2_idx].weight,
+                    child.norm[scannet_idx].weight,
+                    rtol=1e-3,
+                    atol=1e-3
+                ), f"NewDataset2 weight should not match ScanNet in {full_name}"
                 
                 # Check that NewDataset2 is properly initialized
                 assert torch.allclose(child.norm[new_dataset2_idx].weight.mean(), torch.tensor(1.0, device=device), rtol=1e-1), f"NewDataset2 weight not properly initialized in {full_name}"
@@ -217,22 +227,17 @@ def reload_model_for_test():
         @wraps(test_method)
         def wrapper(self, *args, **kwargs):
             logger.warning("Purging model from memory temporarily to conduct test (modifies inplace)")
-            
-            # Store original PointPromptTrainingLoRA instance
-            original_ppt_lora = self.ppt_lora
-            
             # Purge and reload model
-            self.ppt_lora.model = None
-            gc.collect()
+            self.ppt_lora.model = None; gc.collect()
             self.ppt_lora._load_base_model()
             try:
                 # Run the test
                 result = test_method(self, *args, **kwargs)
             finally:
+                self.ppt_lora.model = None; gc.collect()
                 # Restore original PointPromptTrainingLoRA instance
                 self.ppt_lora._load_base_model()
                 self.ppt_lora._inject_trainable_parameters()
-            
             return result
         return wrapper
     return decorator
@@ -245,10 +250,11 @@ class PointPromptTrainingLoRATester:
     @reload_model_for_test()
     def test_ppt_model_expansion(self):
         logger.info(f"Testing expansion of normalisation layers to new conditions {self.ppt_lora.new_conditions}")
+        # static test variables for now
         test_ppt_model_expansion(
             self.ppt_lora.model,
-            new_conditions=self.ppt_lora.new_conditions,
-            condition_mapping=self.ppt_lora.condition_mapping,
+            # new_conditions=self.ppt_lora.new_conditions,
+            # condition_mapping=self.ppt_lora.condition_mapping,
             device=self.ppt_lora.device
         )
 
