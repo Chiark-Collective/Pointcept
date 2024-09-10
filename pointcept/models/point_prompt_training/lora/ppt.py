@@ -2,6 +2,7 @@ import logging
 import typing as ty
 from functools import partial, wraps
 from pathlib import Path
+from ordered_set import OrderedSet
 
 import torch
 import torch.optim
@@ -73,7 +74,7 @@ def expand_ppt_model_conditions(
             condition_mapping[condition] = None
 
     original_conditions = model.conditions
-    model.conditions = tuple(set(list(original_conditions) + new_conditions))
+    model.conditions = tuple(OrderedSet(list(original_conditions) + new_conditions))
 
     def expand_pdnorm(pdnorm):
         if isinstance(pdnorm, PDNorm) and pdnorm.decouple:
