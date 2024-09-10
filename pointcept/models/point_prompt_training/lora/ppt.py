@@ -17,6 +17,7 @@ from pointcept.engines.defaults import (
     default_config_parser,
 )
 from pointcept.engines.test import TESTERS
+from pointcept.models.builder import MODELS
 from .utils import (
     WeightFreezer,
     patch_cfg,
@@ -24,6 +25,8 @@ from .utils import (
     configure_adamw_lora,
     assert_lora_trainable,
     total_optimized_params,
+    count_trainable_parameters,
+    count_lora_parameters
 )
 
 
@@ -49,7 +52,7 @@ def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, device: str = "cud
 def expand_ppt_model_conditions(
     model: nn.Module,
     new_conditions: list[str],
-    condition_mapping: dict[str, str] | None = None
+    condition_mapping: dict[str, str | None] | None = None
 ) -> nn.Module:
     """
     Expands a trained PPT model to handle new conditions (datasets). The appropriate 
@@ -232,9 +235,44 @@ def test_ppt_model_expansion(model, new_conditions=["NewDataset1", "NewDataset2"
     
     # Run the recursive check
     check_pdnorm_layers(expanded_model)
-    
-    print("All tests passed successfully!")
+    logger.info("All tests passed successfully!")
 
+
+@MODELS.register_module("PPT-LoRA")
+class PointPromptTrainingLoRA(nn.Module):
+    """Point Prompt Training for multi-dataset 3D scene understanding (LoRA variant)."""
+
+    def __init__(
+        self,
+        base_model_config: Path,
+        lora_config: dict,
+        freeze_config: dict,
+        new_conditions: list[str] = ["Heritage"],
+        condition_mapping: dict[str, str | None] | None = {"Heritage": "ScanNet"},
+        device: str = "cuda"
+    ):
+        """Initialize the PointPromptTraining model."""
+        super().__init__()
+        self.base_model_config = base_model_config
+        self.lora_config = lora_config
+        self.freeze_config = freeze_config
+        self.new_conditions = new_conditions
+        self.condition_mapping = condition_mapping
+        self.device = device
+        self.model = load_base_model(self.base_model_config, device=self.device) 
+        # 
+        count_trainable_parameters(model)
+        self.weight_freezer = WeightFreezer(self.model)
+        # freeze weights in original model
+        self.weight_freezer.freeze_all()
+        # insert new parameters in normalisation layers to accommodate new datasets
+        if self.new_conditions is not None:
+            self.model = expand_ppt_model_conditions(self.model, self.new_conditions, self.condition_mapping)
+        # insert LoRA adapters to model
+        minlora.add_lora(self.model, lora_config=lora_config)
+
+    def forward(self, *args, **kwargs):
+        return self.model.forward(*args, **kwargs)
 
 
 # Assume 'trained_model' is your PPT model trained on the original datasets
