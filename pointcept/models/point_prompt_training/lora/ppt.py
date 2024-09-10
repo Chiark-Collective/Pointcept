@@ -158,8 +158,11 @@ class PointPromptTrainingLoRA(nn.Module):
         self.new_conditions = new_conditions
         self.condition_mapping = condition_mapping
         self.device = device
-        self.model = load_base_model(self.base_model_config, device=self.device) 
+        self._load_base_model()
         self._inject_trainable_parameters()
+
+    def _load_base_model(self):
+        self.model = load_base_model(self.base_model_config, device=self.device) 
 
     def _inject_trainable_parameters(self):
         assert self.model is not None

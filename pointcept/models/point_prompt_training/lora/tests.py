@@ -43,10 +43,8 @@ def test_ppt_model_expansion(
     
     # Setup
     original_conditions = model.conditions
-    condition_mapping = {
-        "NewDataset1": "ScanNet",  # Copy from ScanNet
-        "NewDataset2": None  # Random initialization
-    }
+    logger.info(f"{original_conditions=}")
+    logger.info(f"{new_conditions=}")
     
     # Store original embedding weights
     original_embedding_weights = model.embedding_table.weight.clone()
@@ -60,7 +58,11 @@ def test_ppt_model_expansion(
         return torch.allclose(a.to(device), b.to(device), rtol=rtol, atol=atol)
     
     # Test embedding table
-    assert expanded_model.embedding_table.weight.shape[0] == len(original_conditions) + len(new_conditions), "Embedding table size mismatch"
+    embed_match = expanded_model.embedding_table.weight.shape[0] == len(original_conditions) + len(new_conditions)
+    assert embed_match, (
+        f"Embedding table size mismatch: {expanded_model.embedding_table.weight.shape[0]} != "
+        f"{len(original_conditions)=} + {len(new_conditions)=}"
+    )
     assert tensors_close(expanded_model.embedding_table.weight[:len(original_conditions)], original_embedding_weights), "Original embeddings changed"
     assert tensors_close(
         expanded_model.embedding_table.weight[len(original_conditions)], 
@@ -215,47 +217,56 @@ def reload_model_for_test():
         @wraps(test_method)
         def wrapper(self, *args, **kwargs):
             logger.warning("Purging model from memory temporarily to conduct test (modifies inplace)")
+            
+            # Store original PointPromptTrainingLoRA instance
+            original_ppt_lora = self.ppt_lora
+            
             # Purge and reload model
-            self.model = None; gc.collect()
-            self.model = load_base_model(self.base_model_config, device=self.device)
+            self.ppt_lora.model = None
+            gc.collect()
+            base_model = load_base_model(self.ppt_lora.base_model_config, device=self.ppt_lora.device)
+            
+            # Create a new PointPromptTrainingLoRA instance
+            self.ppt_lora = PointPromptTrainingLoRA(
+                base_model_config=self.ppt_lora.base_model_config,
+                lora_config=self.ppt_lora.lora_config,
+                new_conditions=self.ppt_lora.new_conditions,
+                condition_mapping=self.ppt_lora.condition_mapping,
+                device=self.ppt_lora.device
+            )
+            
             try:
                 # Run the test
                 result = test_method(self, *args, **kwargs)
             finally:
-                # Purge test model
-                self.model = None; gc.collect()
-                # Restore original model
-                self.model = load_base_model(self.base_model_config, device=self.device)
-                self.model._inject_trainable_parameters()
+                # Restore original PointPromptTrainingLoRA instance
+                self.ppt_lora._load_base_model()
+                self.ppt_lora._inject_trainable_parameters()
+            
             return result
         return wrapper
     return decorator
 
 
 class PointPromptTrainingLoRATester:
-    def __init__(self, model: PointPromptTrainingLoRA):
-        self.model = model
-        self.base_model_config = model.base_model_config
-        self.device = model.device
-        self.new_conditions = model.new_conditions
-        self.condition_mapping = model.condition_mapping
+    def __init__(self, ppt_lora: PointPromptTrainingLoRA):
+        self.ppt_lora = ppt_lora
 
     @reload_model_for_test()
     def test_ppt_model_expansion(self):
-        logger.info(f"Testing expansion of normalisation layers to new conditions {self.new_conditions}")
+        logger.info(f"Testing expansion of normalisation layers to new conditions {self.ppt_lora.new_conditions}")
         test_ppt_model_expansion(
-            self.model,
-            new_conditions=self.new_conditions,
-            condition_mapping=self.condition_mapping,
-            device=self.device
+            self.ppt_lora.model,
+            new_conditions=self.ppt_lora.new_conditions,
+            condition_mapping=self.ppt_lora.condition_mapping,
+            device=self.ppt_lora.device
         )
 
     @reload_model_for_test()
     def test_lora_gradients(self):
-        X = create_spoofed_input(device=self.device, batch_size=16)
-        inspect_lora_gradients(self.model, X)
+        X = create_spoofed_input(device=self.ppt_lora.device, batch_size=16)
+        inspect_lora_gradients(self.ppt_lora.model, X)
 
     def test(self):
         self.test_ppt_model_expansion()
         self.test_lora_gradients()
-
