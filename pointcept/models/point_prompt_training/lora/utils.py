@@ -158,7 +158,7 @@ def configure_adamw_lora(
     weight_decay: float = 0.05,
     learning_rate: float = 0.005,
     betas: tuple[float, float] = (0.9, 0.999),
-    device_type: str = "cuda"
+    device: str = "cuda"
 ) -> torch.optim.AdamW:
     """
     Create an AdamW optimiser which targets only LoRA parameters during
@@ -181,7 +181,7 @@ def configure_adamw_lora(
     logger.info(f"Optimizing {parameter_count(optim_groups)} parameters")
 
     # new PyTorch nightly has a new 'fused' option for AdamW that is much faster
-    use_fused = (device_type == "cuda") and ("fused" in inspect.signature(torch.optim.AdamW).parameters)
+    use_fused = (device == "cuda") and ("fused" in inspect.signature(torch.optim.AdamW).parameters)
     logger.info(f"Using fused AdamW: {use_fused}")
     extra_args = dict(fused=True) if use_fused else dict()
     return torch.optim.AdamW(

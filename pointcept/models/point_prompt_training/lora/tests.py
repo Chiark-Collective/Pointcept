@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch
 import gc
 from pointcept.models.point_prompt_training import PDNorm
+from pointcept.models.point_prompt_training.lora import configure_adamw_lora
 
 from .ppt import expand_ppt_model_conditions, load_base_model, PointPromptTrainingLoRA
 from .utils import (
@@ -222,7 +223,7 @@ def inspect_lora_gradients(model, x, num_steps=5):
             logger.info(f"B matrices without gradients: {b_no_grad}")
 
 
-def reload_model_for_test():
+def reload_model_for_test(apply_lora_before_test: bool = False):
     def decorator(test_method):
         @wraps(test_method)
         def wrapper(self, *args, **kwargs):
@@ -230,6 +231,8 @@ def reload_model_for_test():
             # Purge and reload model
             self.ppt_lora.model = None; gc.collect()
             self.ppt_lora._load_base_model()
+            if apply_lora_before_test:
+                self.ppt_lora._inject_trainable_parameters()
             try:
                 # Run the test
                 result = test_method(self, *args, **kwargs)
@@ -258,11 +261,26 @@ class PointPromptTrainingLoRATester:
             device=self.ppt_lora.device
         )
 
-    @reload_model_for_test()
+    @reload_model_for_test(apply_lora_before_test=True)
     def test_lora_gradients(self):
         X = create_spoofed_input(device=self.ppt_lora.device, batch_size=16)
         inspect_lora_gradients(self.ppt_lora.model, X)
 
+    @reload_model_for_test(apply_lora_before_test=True)
+    def test_forward_backward(self, num_steps: int = 3, batch_size: int = 8):
+        x = create_spoofed_input(device=self.ppt_lora.device, batch_size=batch_size)
+        optimizer = configure_adamw_lora(model=self.ppt_lora.model, device=self.ppt_lora.device)
+        # Perform several optimization steps
+        for i in range(num_steps):
+            logger.info(f"Backprop test step: {i}")
+            optimizer.step()
+            optimizer.zero_grad()
+            y = self.ppt_lora(x)
+            loss = y["loss"].sum()
+            loss.backward()
+            logger.info(f"{loss=}")
+
     def test(self):
         self.test_ppt_model_expansion()
         self.test_lora_gradients()
+        self.test_forward_backward()

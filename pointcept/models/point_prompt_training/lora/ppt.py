@@ -79,6 +79,7 @@ def expand_ppt_model_conditions(
     def expand_pdnorm(pdnorm):
         if isinstance(pdnorm, PDNorm) and pdnorm.decouple:
             first_norm = pdnorm.norm[0]
+            device = first_norm.weight.device  # Get the device of the original norm layer
             if isinstance(first_norm, nn.BatchNorm1d):
                 new_norm_func = lambda: type(first_norm)(
                     first_norm.num_features,
@@ -86,13 +87,13 @@ def expand_ppt_model_conditions(
                     momentum=first_norm.momentum,
                     affine=first_norm.affine,
                     track_running_stats=first_norm.track_running_stats
-                )
+                ).to(device)
             elif isinstance(first_norm, nn.LayerNorm):
                 new_norm_func = lambda: type(first_norm)(
                     first_norm.normalized_shape,
                     eps=first_norm.eps,
                     elementwise_affine=first_norm.elementwise_affine
-                )
+                ).to(device)
             else:
                 raise ValueError(f"Unsupported normalization type: {type(first_norm)}")
 
@@ -125,7 +126,8 @@ def expand_ppt_model_conditions(
     update_norm_layers(model)
 
     old_embed = model.embedding_table
-    new_embed = nn.Embedding(len(model.conditions), old_embed.embedding_dim)
+    device = old_embed.weight.device
+    new_embed = nn.Embedding(len(model.conditions), old_embed.embedding_dim).to(device)
     nn.init.normal_(new_embed.weight, mean=0.0, std=0.02)
     new_embed.weight.data[:len(original_conditions)] = old_embed.weight.data
     
