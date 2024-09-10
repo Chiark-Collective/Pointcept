@@ -35,11 +35,13 @@ REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 TRAINED_PPT_BASE_CONFIG = REPO_ROOT / "test/custom-ppt-config.py" 
 
 
-def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, device: str = "cuda") -> nn.Module:
+def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, repo_root: Path = REPO_ROOT, device: str = "cuda") -> nn.Module:
     """load trained PPT model weights from config for application of LoRA / pdnorm expansion"""
     assert cfg_file.exists
     args = default_argument_parser().parse_args(args=["--config-file", f"{cfg_file}"])
-    cfg = default_config_parser(args.config_file, args.options); cfg = patch_cfg(cfg)
+    # this patching thing not stricty necessary, doesn't matter though because we throw everything away except
+    # the model 
+    cfg = default_config_parser(args.config_file, args.options); cfg = patch_cfg(cfg, repo_root=repo_root)
     tester = TESTERS.build(dict(type=cfg.test.type, cfg=cfg))
     model = tester.model
     model.to(device)

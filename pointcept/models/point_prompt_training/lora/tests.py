@@ -226,7 +226,7 @@ def reload_model_for_test():
                 self.model = None; gc.collect()
                 # Restore original model
                 self.model = load_base_model(self.base_model_config, device=self.device)
-                self._inject_trainable_parameters()
+                self.model._inject_trainable_parameters()
             return result
         return wrapper
     return decorator
