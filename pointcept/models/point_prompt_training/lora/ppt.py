@@ -8,6 +8,7 @@ import torch.optim
 import torch.nn as nn
 import minlora
 import torch
+import gc
 from pointcept.models.point_prompt_training import PDNorm
 from minlora import LoRAParametrization
 from spconv.pytorch.conv import SubMConv3d
@@ -74,7 +75,7 @@ def expand_ppt_model_conditions(
             condition_mapping[condition] = None
 
     original_conditions = model.conditions
-    model.conditions = tuple(list(original_conditions) + new_conditions)
+    model.conditions = tuple(set(list(original_conditions) + new_conditions))
 
     def expand_pdnorm(pdnorm):
         if isinstance(pdnorm, PDNorm) and pdnorm.decouple:
@@ -140,7 +141,15 @@ def expand_ppt_model_conditions(
     return model
 
 
-def test_ppt_model_expansion(model, new_conditions=["NewDataset1", "NewDataset2"], device="cuda"):
+def test_ppt_model_expansion(
+    model,
+    new_conditions: list[str] = ["NewDataset1", "NewDataset2"],
+    condition_mapping: dict[str, str | None] | None = {
+        "NewDataset1": "ScanNet",  # Copy from ScanNet
+        "NewDataset2": None  # Random initialization
+    },
+    device: str = "cuda"
+):
     """
     Test function to verify the correctness of PDNorm expansion in a PPT model.
     
@@ -205,13 +214,13 @@ def test_ppt_model_expansion(model, new_conditions=["NewDataset1", "NewDataset2"
                 
                 # NewDataset1 should be copied from ScanNet
                 if not tensors_close(child.norm[new_dataset1_idx].weight, child.norm[scannet_idx].weight):
-                    print(f"NewDataset1 weight: {child.norm[new_dataset1_idx].weight}")
-                    print(f"ScanNet weight: {child.norm[scannet_idx].weight}")
+                    logger.info(f"NewDataset1 weight: {child.norm[new_dataset1_idx].weight}")
+                    logger.info(f"ScanNet weight: {child.norm[scannet_idx].weight}")
                     raise AssertionError(f"NewDataset1 weight not copied correctly in {full_name}")
                 
                 if not tensors_close(child.norm[new_dataset1_idx].bias, child.norm[scannet_idx].bias):
-                    print(f"NewDataset1 bias: {child.norm[new_dataset1_idx].bias}")
-                    print(f"ScanNet bias: {child.norm[scannet_idx].bias}")
+                    logger.info(f"NewDataset1 bias: {child.norm[new_dataset1_idx].bias}")
+                    logger.info(f"ScanNet bias: {child.norm[scannet_idx].bias}")
                     raise AssertionError(f"NewDataset1 bias not copied correctly in {full_name}")
                 
                 # NewDataset2 should be randomly initialized
@@ -249,7 +258,7 @@ class PointPromptTrainingLoRA(nn.Module):
         freeze_config: dict,
         new_conditions: list[str] = ["Heritage"],
         condition_mapping: dict[str, str | None] | None = {"Heritage": "ScanNet"},
-        device: str = "cuda"
+        device: str = "cuda",
     ):
         """Initialize the PointPromptTraining model."""
         super().__init__()
@@ -260,34 +269,46 @@ class PointPromptTrainingLoRA(nn.Module):
         self.condition_mapping = condition_mapping
         self.device = device
         self.model = load_base_model(self.base_model_config, device=self.device) 
-        # 
-        count_trainable_parameters(model)
-        self.weight_freezer = WeightFreezer(self.model)
+        self._inject_trainable_parameters()
+
+    def _inject_trainable_parameters(self):
+        assert self.model is not None
+        # track parameters 
+        n_param_trainable_base = count_trainable_parameters(self.model)
+        logger.info(f"{n_param_trainable_base} trainable parameters on base model")
         # freeze weights in original model
+        self.weight_freezer = WeightFreezer(self.model)
         self.weight_freezer.freeze_all()
         # insert new parameters in normalisation layers to accommodate new datasets
         if self.new_conditions is not None:
             self.model = expand_ppt_model_conditions(self.model, self.new_conditions, self.condition_mapping)
         # insert LoRA adapters to model
-        minlora.add_lora(self.model, lora_config=lora_config)
+        minlora.add_lora(self.model, lora_config=self.lora_config)
+        # track parameters
+        lora_trainable_params = count_trainable_parameters(self.model)
+        logger.info(f"{lora_trainable_params} params after LoRA")
+
+    def test_ppt_model_expansion(self):
+        logger.info(f"Testing expansion of normalisation layers to new conditions {self.new_conditions}")
+        logger.warning("Purging model from memory temporarily to conduct PDNorm layer injection test (modifies inplace)")
+        # purge model
+        self.model = None; gc.collect()
+        # reload model from config
+        self.model = load_base_model(self.base_model_config, device=self.device) 
+        test_ppt_model_expansion(
+            self.model,
+            new_conditions=self.new_conditions,
+            condition_mapping=self.condition_mapping,
+            device=self.device
+        )
+        # purge after test
+        self.model = None; gc.collect()
+        self.model = load_base_model(self.base_model_config, device=self.device) 
+        self._inject_trainable_parameters()
 
     def forward(self, *args, **kwargs):
         return self.model.forward(*args, **kwargs)
 
-
-# Assume 'trained_model' is your PPT model trained on the original datasets
-
-wf = WeightFreezer(model) 
-print("loaded")
-# Define new conditions and mapping
-new_conditions = ["NewDataset1", "NewDataset2"]
-condition_mapping = {
-    "NewDataset1": "ScanNet",  # Initialize NewDataset1 with ScanNet's parameters
-    "NewDataset2": None  # Initialize NewDataset2 with default initialization
-}
-
-# Expand the model
-expanded_model = expand_ppt_model_conditions(model, new_conditions, condition_mapping)
 
 # lora adapter hyperparameters
 lora_hparams = dict(
@@ -314,16 +335,6 @@ lora_config = {
     }
 }
 
-print("# params before LoRA:", count_trainable_parameters(model))
-wf.print_frozen_status()
-print("freezing all weights")
-wf.freeze_all()
-print("# params after freezing:", count_trainable_parameters(model))
-print("applying LoRA adapters")
-minlora.add_lora(model, lora_config=lora_config)
-
-lora_trainable_params = count_trainable_parameters(model)["trainable"]
-print("# params after LoRA:", lora_trainable_params)
 
 # create AdamW optimizer (for LoRA weights only)
 optimizer = configure_adamw_lora(
@@ -405,15 +416,16 @@ def inspect_lora_gradients(model, x, num_steps=5):
         total
     ) = results
 
-    print("*** First Pass ***")
-    print(f"Initial gradients: A: {a_grad}/{total_a}, B: {b_grad}/{total_b}")
-    print(f"Trainable parameters with gradients: {trainable_grad:,}")
-    print(f"Frozen parameters: {frozen:,}")
-    print(f"Total parameters: {total:,}")
+    logger.info("*** First Pass ***")
+    logger.info
+    logger.info(f"Initial gradients: A: {a_grad}/{total_a}, B: {b_grad}/{total_b}")
+    logger.info(f"Trainable parameters with gradients: {trainable_grad:,}")
+    logger.info(f"Frozen parameters: {frozen:,}")
+    logger.info(f"Total parameters: {total:,}")
     if a_no_grad:
-        print(f"Total A matrices without gradients: {len(a_no_grad)}")
+        logger.info(f"Total A matrices without gradients: {len(a_no_grad)}")
     if b_no_grad:
-        print(f"Total B matrices without gradients: {len(b_no_grad)}")
+        logger.info(f"Total B matrices without gradients: {len(b_no_grad)}")
 
     # Perform several optimization steps
     for i in range(num_steps):
@@ -427,15 +439,15 @@ def inspect_lora_gradients(model, x, num_steps=5):
         results = check_grads()
         a_grad, b_grad, total_a, total_b, a_no_grad, b_no_grad, trainable_grad, frozen, total = results
 
-        print(f"\nGradients after step {i+1}:")
-        print(f"A: {a_grad}/{total_a}, B: {b_grad}/{total_b}")
-        print(f"Trainable parameters with gradients: {trainable_grad:,}")
-        print(f"Frozen parameters: {frozen:,}")
-        print(f"Total parameters: {total:,}")
+        logger.info(f"\nGradients after step {i+1}:")
+        logger.info(f"A: {a_grad}/{total_a}, B: {b_grad}/{total_b}")
+        logger.info(f"Trainable parameters with gradients: {trainable_grad:,}")
+        logger.info(f"Frozen parameters: {frozen:,}")
+        logger.info(f"Total parameters: {total:,}")
         if a_no_grad:
-            print(f"A matrices without gradients: {a_no_grad}")
+            logger.info(f"A matrices without gradients: {a_no_grad}")
         if b_no_grad:
-            print(f"B matrices without gradients: {b_no_grad}")
+            logger.info(f"B matrices without gradients: {b_no_grad}")
             
 X = create_spoofed_input(device="cuda", batch_size=16)
 inspect_lora_gradients(model, X)
