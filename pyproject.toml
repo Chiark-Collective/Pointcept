@@ -78,6 +78,7 @@ graphviz = "^0.20.3"
 torchview = "^0.2.6"
 pytora = "^0.0.4"
 minlora = {git = "https://github.com/SlapDrone/minLoRA.git"}
+vtk = "^9.3.1"
 
 [tool.poetry.dev-dependencies]
 jupyter="*"
