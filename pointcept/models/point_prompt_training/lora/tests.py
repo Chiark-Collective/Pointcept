@@ -224,17 +224,7 @@ def reload_model_for_test():
             # Purge and reload model
             self.ppt_lora.model = None
             gc.collect()
-            base_model = load_base_model(self.ppt_lora.base_model_config, device=self.ppt_lora.device)
-            
-            # Create a new PointPromptTrainingLoRA instance
-            self.ppt_lora = PointPromptTrainingLoRA(
-                base_model_config=self.ppt_lora.base_model_config,
-                lora_config=self.ppt_lora.lora_config,
-                new_conditions=self.ppt_lora.new_conditions,
-                condition_mapping=self.ppt_lora.condition_mapping,
-                device=self.ppt_lora.device
-            )
-            
+            self.ppt_lora._load_base_model()
             try:
                 # Run the test
                 result = test_method(self, *args, **kwargs)
