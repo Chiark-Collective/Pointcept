@@ -577,10 +577,11 @@ class ParametrixPreprocessor():
 
         combined_dict = combine_category_meshes(split_dict)
         for split in combined_dict:
+            save_dir = self.split_dirs[split]
+            logger.info(f"saving {split} files to {save_dir}")
             for category, mesh in combined_dict[split].items():
-                p = self.split_dirs[split] / f"{category}.ply"
+                p = save_dir / f"{category}.ply"
                 o3d.io.write_triangle_mesh(p.as_posix(), mesh)
-                logger.info(f"saved {split}, {category} to {p}")
 
 
 def combine_category_meshes(splits):
@@ -600,7 +601,7 @@ def combine_category_meshes(splits):
             for mesh in meshes:
                 combined_mesh += mesh
             combined_splits[split_name][category] = combined_mesh
-            logger.info(f"Combined {len(meshes)} meshes for {split_name}/{category}")
+            # logger.info(f"Combined {len(meshes)} meshes for {split_name}/{category}")
     return combined_splits
 
 ## Helper funcs to generate library splits.
