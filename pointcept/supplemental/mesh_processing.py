@@ -13,6 +13,7 @@ from pathlib import Path
 from vtk.util.numpy_support import vtk_to_numpy
 
 from pointcept.supplemental.utils import get_category_list
+from pointcept.supplemental.utils2 import read_ply_mesh
 from pointcept.supplemental.preprocessing import (
     combine_category_meshes,
     divide_all_categories_into_cells,
@@ -228,7 +229,7 @@ class DataHandler:
         # Summarise created files
         logger.info("Converted .bin files to .ply files.")
       
-    def _transform_meshes(self):
+    def _transform_meshes_o3d(self):
         """
         Takes the extracted .ply meshes, swaps z-y axes while maintaining chirality, rescales from cm to m,
         and recenters all meshes so that the center of their combined AABB is at (0, 0, 0).
@@ -275,6 +276,98 @@ class DataHandler:
             o3d.io.write_triangle_mesh(ply_file.as_posix(), mesh)      
         logger.info("Mesh transformation complete!")
 
+
+    def _transform_meshes(self):
+        """
+        Takes the extracted .ply meshes, swaps z-y axes while maintaining chirality, rescales from cm to m,
+        and recenters all meshes so that the center of their combined AABB is at (0, 0, 0).
+        """
+        # List of input .ply files with relative paths
+        ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
+        logger.info("Transforming meshes...")
+
+        # Transformation matrix to switch Y and Z axes, reverse X axis, and scale by 0.01
+        transform_matrix = vtk.vtkTransform()
+        transform_matrix.Scale(-0.01, 0.01, 0.01)  # Scale and reverse x-axis
+        transform_matrix.RotateWXYZ(90, 1, 0, 0)   # Y becomes Z
+        transform_matrix.RotateWXYZ(90, 0, 0, 1)   # Z becomes Y
+
+        # Initialize variables to compute the combined AABB
+        global_min_bound = np.array([np.inf, np.inf, np.inf])
+        global_max_bound = np.array([-np.inf, -np.inf, -np.inf])
+        
+        # Step 1: Compute the combined AABB over all meshes
+        meshes = []  # Store meshes for later processing
+        for ply_file in ply_files:
+            logger.info(f"Reading mesh from {ply_file}...")
+
+            # Read mesh using VTK
+            mesh = read_ply_mesh(ply_file.as_posix(), compute_normals=True)
+            
+            if mesh is None:
+                logger.error(f"Failed to read mesh from {ply_file}.")
+                continue
+
+            # Apply initial transformation
+            transform_filter = vtk.vtkTransformPolyDataFilter()
+            transform_filter.SetInputData(mesh)
+            transform_filter.SetTransform(transform_matrix)
+            transform_filter.Update()
+
+            transformed_mesh = transform_filter.GetOutput()
+
+            if transformed_mesh is None:
+                logger.error(f"Transformation failed for mesh {ply_file}.")
+                continue
+            
+            # Update global AABB
+            bounds = transformed_mesh.GetBounds()
+            logger.info(f"Bounds for {ply_file}: {bounds}")
+
+            min_bound = np.array([bounds[0], bounds[2], bounds[4]])
+            max_bound = np.array([bounds[1], bounds[3], bounds[5]])
+            global_min_bound = np.minimum(global_min_bound, min_bound)
+            global_max_bound = np.maximum(global_max_bound, max_bound)
+
+            # Store the mesh and its corresponding file for later processing
+            meshes.append((transformed_mesh, ply_file))
+
+        # Step 2: Calculate the center of the global AABB
+        aabb_center = (global_min_bound + global_max_bound) / 2
+        logger.info(f"Global AABB center: {aabb_center}")
+
+        # Step 3: Recenter each mesh so that the AABB center is at (0, 0, 0)
+        for mesh, ply_file in meshes:
+            logger.info(f"Recentering mesh for {ply_file}...")
+
+            # Translate mesh to center of global AABB
+            translate_transform = vtk.vtkTransform()
+            translate_transform.Translate(-aabb_center)
+
+            translate_filter = vtk.vtkTransformPolyDataFilter()
+            translate_filter.SetInputData(mesh)
+            translate_filter.SetTransform(translate_transform)
+            translate_filter.Update()
+
+            recentered_mesh = translate_filter.GetOutput()
+
+            if recentered_mesh is None:
+                logger.error(f"Recentering failed for mesh {ply_file}.")
+                continue
+
+            # Write the transformed mesh back to the .ply file
+            writer = vtk.vtkPLYWriter()
+            writer.SetFileName(ply_file.as_posix())
+            writer.SetInputData(recentered_mesh)
+            success = writer.Write()
+
+            if not success:
+                logger.error(f"Failed to write transformed mesh to {ply_file}.")
+            else:
+                logger.info(f"Successfully wrote transformed mesh to {ply_file}.")
+
+        logger.info("Mesh transformation complete!")
+
     def create_meshes(self):
         """
         Run the full mesh extraction and transformation pipeline.
@@ -282,7 +375,7 @@ class DataHandler:
         self._prepare_mesh_extraction()
         self._split_bin_by_category()
         self._convert_bin_to_ply()
-        self._transform_meshes()
+        self._transform_meshes_o3d()
 
     #################################################################################
     # Funcs for loading saved extracted meshes
@@ -303,6 +396,43 @@ class DataHandler:
                     self._extracted_mesh_dict[category]["surface_area"] = mesh.get_surface_area()
                     break                  
 
+    def load_extracted_meshes_vtk(self):
+        """
+        Loads the processed meshes using VTK and stores the file paths and loaded meshes in the category dict.
+        """
+        ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
+        for file_path in ply_files:           
+            file_stem = file_path.stem.upper()
+            for category in CATEGORIES:
+                if category in file_stem:  # Match based on the category prefix
+                    self._extracted_mesh_dict[category] = {}
+                    self._extracted_mesh_dict[category]["file"] = file_path
+
+                    # Load the mesh using VTK
+                    reader = vtk.vtkPLYReader()
+                    reader.SetFileName(file_path.as_posix())
+                    reader.Update()
+                    mesh = reader.GetOutput()  # vtkPolyData object
+
+                    # Compute normals for proper rendering and further processing
+                    normals_filter = vtk.vtkPolyDataNormals()
+                    normals_filter.SetInputData(mesh)
+                    normals_filter.ComputePointNormalsOn()
+                    normals_filter.Update()
+                    mesh_with_normals = normals_filter.GetOutput()
+
+                    # Store the mesh in the dictionary
+                    self._extracted_mesh_dict[category]["mesh"] = mesh_with_normals
+
+                    # Calculate the surface area using VTK's MassProperties
+                    mass_properties = vtk.vtkMassProperties()
+                    mass_properties.SetInputData(mesh_with_normals)
+                    surface_area = mass_properties.GetSurfaceArea()
+
+                    # Store the surface area in the dictionary
+                    self._extracted_mesh_dict[category]["surface_area"] = surface_area
+                    break
+
     def ensure_meshes(self, bin_file=None):
         """
         Loads any existing extracted meshes, or runs extraction if necessary.
@@ -313,7 +443,7 @@ class DataHandler:
         else:
             logger.info(f"Label {self.label} does not currently have extracted meshes. Attempting now.")
             self.create_meshes()
-        self.load_extracted_meshes()
+        self.load_extracted_meshes_vtk()
         
     #################################################################################
     # Funcs for train/test/eval folds
@@ -533,27 +663,57 @@ class MeshSampler:
         save(output_path): Saves the generated point cloud to a specified path.
     """
     
-    def __init__(self, mesh_path, gt_value):
+    def __init__(self, mesh_path=None, mesh_data=None, gt_value=None):
         """
-        Initializes the MeshSampler object with the specified mesh file and ground truth value.
+        Initializes the MeshSampler object with the specified mesh file or vtkPolyData and ground truth value.
 
         Args:
-            mesh_path (str): Path to the mesh file.
-            gt_value (float): Ground truth value to assign to each point.
+            mesh_path (str, optional): Path to the mesh file.
+            mesh_data (vtk.vtkPolyData, optional): A vtkPolyData object representing the mesh.
+            gt_value (int): Ground truth value to assign to each point.
         
         Raises:
+            ValueError: If neither mesh_path nor mesh_data is provided.
+            ValueError: If both mesh_path and mesh_data are provided.
             FileNotFoundError: If the mesh_path does not exist or is not a file.
+            TypeError: If gt_value is not an integer.
         """
-        self.mesh_path = Path(mesh_path)
-        if not self.mesh_path.exists() or not self.mesh_path.is_file():
-            raise FileNotFoundError(f"Provided mesh path does not exist: {mesh_path}")
-        if not isinstance(gt_value, int):
+        # Validate input arguments
+        if mesh_path is None and mesh_data is None:
+            raise ValueError("Either mesh_path or mesh_data must be provided.")
+        if mesh_path is not None and mesh_data is not None:
+            raise ValueError("Only one of mesh_path or mesh_data should be provided.")
+
+        if gt_value is None or not isinstance(gt_value, int):
             raise TypeError(f"gt_value must be an integer, got {type(gt_value).__name__} instead.")
+        
+        self._gt_value = gt_value
+        
+        # Initialize mesh based on provided input
+        if mesh_path is not None:
+            # Load mesh from file path
+            self.mesh_path = Path(mesh_path)
+            if not self.mesh_path.exists() or not self.mesh_path.is_file():
+                raise FileNotFoundError(f"Provided mesh path does not exist or is not a file: {mesh_path}")
+            
+            # Read the mesh using VTK
+            reader = vtk.vtkPLYReader()
+            reader.SetFileName(self.mesh_path.as_posix())
+            reader.Update()
+            self.mesh = reader.GetOutput()
+        else:
+            # Use provided vtkPolyData object directly
+            if not isinstance(mesh_data, vtk.vtkPolyData):
+                raise TypeError(f"mesh_data must be a vtkPolyData object, got {type(mesh_data).__name__} instead.")
+            self.mesh = mesh_data
+
+        # Ensure the mesh is valid vtkPolyData
+        if not isinstance(self.mesh, vtk.vtkPolyData):
+            raise TypeError("Mesh must be a vtkPolyData object.")
 
         self._points = None
         self._colors = None
         self._normals = None
-        self._gt_value = gt_value
     
     @staticmethod
     def check_output_path_viability(output_path):
@@ -581,50 +741,80 @@ class MeshSampler:
             except Exception as e:
                 logger.error(f"Failed to create directory: {path.parent}")
                 raise FileNotFoundError(f"Failed to create directory at {path.parent}: {e}")
-    
-    def generate_cloud(self, resolution=0.05):
+        
+    def generate_cloud(
+        self,
+        poisson_radius=0.02,  # Radius for Poisson Disk Sampling
+        resolution=None,  # Sampling distance, computed as a function of poisson_radius if not provided
+        calculate_normals_colors=True,  # Whether to calculate normals and interpolate colors
+        apply_poisson_disk=True  # Whether to apply Poisson Disk Sampling after initial sampling
+    ):
         """
         Generates a sampled point cloud from the mesh at the given resolution.
 
         Args:
-            resolution (float): The distance between sampled points.
+            poisson_radius (float): Radius to use for Poisson Disk Sampling.
+            resolution (float): The distance between sampled points; defaults to poisson_radius / 2.
+            calculate_normals_colors (bool): If True, calculate normals and interpolate colors.
+            apply_poisson_disk (bool): If True, apply Poisson Disk Sampling after the initial sampling.
         """
+        # Determine resolution based on poisson_radius if not explicitly provided
+        if resolution is None:
+            resolution = poisson_radius  # This seems a good compromise for point spatial and density uniformity
+
         # Step 1: Setup the reader and load the mesh
-        reader = vtk.vtkPLYReader()
-        reader.SetFileName(self.mesh_path.as_posix())
-        reader.Update()
-        input_mesh = reader.GetOutput()
-        
+        input_mesh = self.mesh
+
+        # Compute normals on the original mesh if interpolating normals
+        if calculate_normals_colors:
+            normals_filter = vtk.vtkPolyDataNormals()
+            normals_filter.SetInputData(input_mesh)
+            normals_filter.ComputePointNormalsOn()
+            normals_filter.ConsistencyOn()
+            normals_filter.AutoOrientNormalsOn()
+            normals_filter.Update()
+            mesh_with_normals = normals_filter.GetOutput()
+        else:
+            mesh_with_normals = input_mesh
+
         # Step 2: Setup Poisson Disk Sampler to sample the mesh
         sampler = vtk.vtkPolyDataPointSampler()
-        sampler.SetInputData(input_mesh)
+        sampler.SetInputData(mesh_with_normals)
         sampler.SetDistance(resolution)
         sampler.Update()
-        # Output of sampler is the point cloud without color and normal data
         sampled_point_cloud = sampler.GetOutput()
-        
-        # Step 3: Use vtkProbeFilter to interpolate colors onto the sampled points
-        probe_filter = vtk.vtkProbeFilter()
-        probe_filter.SetInputData(sampled_point_cloud)
-        probe_filter.SetSourceData(input_mesh)
-        probe_filter.Update()
-        
-        # The output with interpolated colors
-        interpolated_point_cloud = probe_filter.GetOutput()
-        
-        # Step 4: Compute normals for the sampled points using vtkPolyDataNormals
-        normals_filter = vtk.vtkPolyDataNormals()
-        normals_filter.SetInputData(interpolated_point_cloud)
-        normals_filter.ComputePointNormalsOn()
-        normals_filter.Update()
-        
-        # Get the point data with normals
-        normals_point_cloud = normals_filter.GetOutput()
-        
-        # Convert the interpolated colors to numpy arrays
-        self._points = vtk_to_numpy(normals_point_cloud.GetPoints().GetData())
-        self._colors = vtk_to_numpy(normals_point_cloud.GetPointData().GetScalars())
-        self._normals = vtk_to_numpy(normals_point_cloud.GetPointData().GetNormals())
+        num_points_initial = sampled_point_cloud.GetNumberOfPoints()
+        logger.info(f"Number of points after initial sampling: {num_points_initial}")
+
+        # Step 3: Optionally apply Poisson Disk Sampling
+        if apply_poisson_disk:
+            poisson_disk_sampler = vtk.vtkPoissonDiskSampler()
+            poisson_disk_sampler.SetInputData(sampled_point_cloud)
+            poisson_disk_sampler.SetRadius(poisson_radius)
+            poisson_disk_sampler.Update()
+            sampled_point_cloud = poisson_disk_sampler.GetOutput()
+            num_points_poisson = sampled_point_cloud.GetNumberOfPoints()
+            logger.info(f"Number of points after Poisson Disk Sampling: {num_points_poisson}")
+
+        # Step 4: Interpolate colors and normals from the original mesh to the sampled points
+        if calculate_normals_colors:
+            probe_filter = vtk.vtkProbeFilter()
+            probe_filter.SetInputData(sampled_point_cloud)
+            probe_filter.SetSourceData(mesh_with_normals)
+            probe_filter.Update()
+
+            # Get the output with interpolated normals and colors
+            interpolated_point_cloud = probe_filter.GetOutput()
+
+            # Convert the interpolated colors and points to numpy arrays
+            self._points = vtk_to_numpy(interpolated_point_cloud.GetPoints().GetData())
+            self._colors = vtk_to_numpy(interpolated_point_cloud.GetPointData().GetScalars()) if interpolated_point_cloud.GetPointData().GetScalars() else None
+            self._normals = vtk_to_numpy(interpolated_point_cloud.GetPointData().GetNormals())
+        else:
+            # If normals and colors are not to be calculated, simply extract points
+            self._points = vtk_to_numpy(sampled_point_cloud.GetPoints().GetData())
+            self._colors = None
+            self._normals = None
 
 
     def save(self, output_path=None):
