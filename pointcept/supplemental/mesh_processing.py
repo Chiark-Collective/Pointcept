@@ -505,9 +505,20 @@ class MeshAnalyser:
         self._cached_aabb = None
         self._mesh_dict = {}
         self._mesh_area_dict = {}
+
+        # Compute surface area for each mesh using vtkMassProperties
         for category, mesh in data_handler.extracted_meshes.items():
-            self._mesh_area_dict[category] = mesh.get_surface_area()
+            if mesh is not None and mesh.GetNumberOfPoints() > 0:  # Ensure mesh is valid and not empty
+                mass_properties = vtk.vtkMassProperties()
+                mass_properties.SetInputData(mesh)
+                mass_properties.Update()
+                self._mesh_area_dict[category] = mass_properties.GetSurfaceArea()
+            else:
+                self._mesh_area_dict[category] = 0.0  # Assign 0.0 if the mesh is empty or None
+
+        # Compute the total surface area
         self.total_mesh_surface_area = sum(area for area in self._mesh_area_dict.values())
+
 
     @property
     def aabb_all_meshes(self):
@@ -540,64 +551,86 @@ class MeshAnalyser:
         return self._cached_aabb
 
     @property
+    def aabb_all_meshes_vtk(self):
+        """
+        Returns the min and max AABB bounds across all vtkPolyData meshes in the form of a dict,
+        and caches these values after first computation.
+        """
+        if self._cached_aabb is not None:
+            return self._cached_aabb  # Return cached value if available
+
+        # Initialize global bounds to extreme values
+        global_min_bound = np.array([np.inf, np.inf, np.inf])  # Initialize to positive infinity
+        global_max_bound = np.array([-np.inf, -np.inf, -np.inf])  # Initialize to negative infinity
+        
+        # Compute the combined AABB over all meshes
+        for category, mesh in self.meshes.items():
+            if mesh is not None and mesh.GetNumberOfPoints() > 0:  # Ensure mesh is valid and not empty
+                # Get the bounds of the current mesh as a tuple (xmin, xmax, ymin, ymax, zmin, zmax)
+                bounds = mesh.GetBounds()
+
+                # Convert bounds to min and max bound arrays
+                min_bound = np.array([bounds[0], bounds[2], bounds[4]])  # (xmin, ymin, zmin)
+                max_bound = np.array([bounds[1], bounds[3], bounds[5]])  # (xmax, ymax, zmax)
+                
+                # Update the global AABB bounds
+                global_min_bound = np.minimum(global_min_bound, min_bound)
+                global_max_bound = np.maximum(global_max_bound, max_bound)
+
+        # Cache the result before returning
+        self._cached_aabb = {
+            "min": global_min_bound,
+            "max": global_max_bound
+        }
+        return self._cached_aabb
+
+    @property
     def meshes(self):
         return self.dh.extracted_meshes
 
     #################################################################################
     # Toy pointcloud generation
     #################################################################################  
-    def generate_toy_pcds(self, total_points=5000, normalize_by_area=False, categories=None):
+    def generate_toy_pcds(self, resolution=0.2, categories=None):
         """
-        Generate point clouds from the meshes stored in category_dict.
-        
+        Generate point clouds from the meshes stored in category_dict using MeshSampler.
+
         Args:
-            total_points (int): The total number of points to generate.
-            normalize_by_area (bool): If True, normalize the number of points generated per category based on surface area.
+            resolution (float): The resolution to use for sampling points.
             categories (list, optional): List of categories to generate point clouds for. Defaults to None (all categories).
-        
+
         Returns:
-            dict: A dictionary with categories as keys and sampled point clouds as values.
+            dict: A dictionary with categories as keys and sampled point clouds (numpy arrays) as values.
         """
         dh = self.dh
-        # Set categories to all keys in category_dict if not provided
-        all_cats = False
-        total = self.total_mesh_surface_area
+        # Set categories to all keys in meshes if not provided
         if categories is None:
-            all_cats = True
             categories = list(self.meshes.keys())
-        else:
-            total = sum(area for area in self._mesh_area_dict.values() if cat in categories)
-            
+
         logger.info(f"Generating toy pointclouds for categories {categories}.")
-        logger.info(f"Sampling {total_points} total points. Normalize_by_area = {normalize_by_area}")       
+        logger.info(f"Sampling with resolution {resolution}.")
         pcd_dict = {}
-        
+
         # Iterate over the specified categories
         for category, mesh in self.meshes.items():
-            if category in self.meshes:
-                surface_area = self._mesh_area_dict[category]
-                
+            if category in categories:
                 # Check if mesh is valid
-                if mesh is not None and not mesh.is_empty():
-                    # Compute the number of points to sample
-                    if normalize_by_area:
-                        # Normalizing by surface area
-                        points_to_sample = int((surface_area / total) * total_points)
-                    else:
-                        # Evenly distribute points across all categories
-                        points_to_sample = total_points // len(categories)  # Use the length of the selected categories
+                if mesh is not None and mesh.GetNumberOfPoints() > 0:
+                    # Initialize MeshSampler with the current mesh
+                    mesh_sampler = MeshSampler(mesh_data=mesh, gt_value=0)  # 'gt_value' can be any placeholder, not used here.
                     
-                    # Ensure the mesh has vertex normals computed for better sampling
-                    mesh.compute_vertex_normals()
-    
-                    # Sample points from the mesh based on the computed number
-                    if points_to_sample > 0:  # Ensure positive number of points
-                        sampled_pcd = mesh.sample_points_poisson_disk(number_of_points=points_to_sample)
-                        pcd_dict[category] = sampled_pcd
-                        logger.info(f"  Sampled {points_to_sample} points for category {category}")
+                    # Generate point cloud with the specified resolution
+                    mesh_sampler.generate_cloud(resolution=resolution, calculate_normals_colors=False)
+                    
+                    # Get the sampled points directly from the _points attribute
+                    pcd_dict[category] = mesh_sampler._points
+
+                    # logger.info(f"  Sampled {len(sampled_points)} points for category {category}")
+                else:
+                    logger.warning(f"Mesh for category '{category}' is invalid or empty.")
             else:
-                logger.warning(f"Category '{category}' not found in _extracted_mesh_dict.")
-        
+                logger.warning(f"Category '{category}' not found in meshes.")
+
         logger.info("Finished generating toy PCDs.")
         self.toy_pcds = pcd_dict
         return pcd_dict
@@ -744,8 +777,8 @@ class MeshSampler:
         
     def generate_cloud(
         self,
-        poisson_radius=0.02,  # Radius for Poisson Disk Sampling
-        resolution=None,  # Sampling distance, computed as a function of poisson_radius if not provided
+        poisson_radius=None,  # Radius for Poisson Disk Sampling
+        resolution=0.02,  # Sampling distance, computed as a function of poisson_radius if not provided
         calculate_normals_colors=True,  # Whether to calculate normals and interpolate colors
         apply_poisson_disk=True  # Whether to apply Poisson Disk Sampling after initial sampling
     ):
@@ -759,8 +792,8 @@ class MeshSampler:
             apply_poisson_disk (bool): If True, apply Poisson Disk Sampling after the initial sampling.
         """
         # Determine resolution based on poisson_radius if not explicitly provided
-        if resolution is None:
-            resolution = poisson_radius  # This seems a good compromise for point spatial and density uniformity
+        if poisson_radius is None:
+            poisson_radius = 7/8 * resolution  # This seems a good compromise for point spatial and density uniformity
 
         # Step 1: Setup the reader and load the mesh
         input_mesh = self.mesh
