@@ -16,7 +16,7 @@ jl = "jupyter lab --no-browser --allow-root --ip 0.0.0.0 --port 8888"
 [tool.poetry.dependencies]
 python = "^3.11"
 # numpy = "^1.26"
-numpy = "*"
+numpy = "<2.0"
 torch = "^2.2"
 torchvision = "^0.17"
 torchaudio = "^2.2"
@@ -73,6 +73,10 @@ pointgroup_ops = {path = "./wheels/pointgroup_ops-0.0.0-cp311-cp311-linux_x86_64
 python-dotenv = "^1.0.1"
 # flash_attn= "^2.6"
 pdal = "^3.4.5"
+ipywebrtc = "^0.6.0"
+vtk = "^9.3.1"
+pyvista = "^0.44.1"
+trame = "^3.6.5"
 
 [tool.poetry.dev-dependencies]
 jupyter="*"

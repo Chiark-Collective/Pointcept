@@ -2,10 +2,14 @@ import logging
 import shutil
 import subprocess
 import re
+import psutil
+import os
+import gc
 
 import vtk
 import laspy
 import open3d as o3d
+import pyvista as pv
 import numpy as np
 
 from pathlib import Path
@@ -14,13 +18,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 
 from pointcept.supplemental.utils import get_category_list
 from pointcept.supplemental.utils2 import read_ply_mesh
-from pointcept.supplemental.preprocessing import (
-    combine_category_meshes,
-    divide_all_categories_into_cells,
-    transform_cells,
-    split_all_categories,
-    process_splits,
-)
+from pointcept.supplemental.preprocessing import *
 
 
 # Set up logging
@@ -96,6 +94,8 @@ class DataHandler:
         self.mesh_dir = self.root_dir / "meshes"
         self.raw_mesh_dir = self.mesh_dir / "raw"
         self.extraction_dir = self.mesh_dir / "extracted" / label
+        self.transformed_dir = self.extraction_dir / 'transformed'
+
         self.split_dir = self.extraction_dir / "splits"
         self.split_dirs = {'train': self.extraction_dir / "train", 'test': self.extraction_dir / "test", 'eval': self.extraction_dir / "eval"}
         self.raw_mesh_path = self.raw_mesh_dir / f"{self.label}.bin"
@@ -109,9 +109,6 @@ class DataHandler:
                      self.split_dir, self.clouds_root] + list(self.split_dirs.values()):
             path.mkdir(parents=True, exist_ok=True)
 
-    #################################################################################
-    # Funcs for setting and verifying the input .bin to mesh extraction exists.
-    #################################################################################
     def set_bin_file(self, bin_file):
         """
         Only needs to be called if the .bin file is in a non-standard location outside the data_root.
@@ -138,16 +135,13 @@ class DataHandler:
             logging.error(f" {self.raw_mesh_path.as_posix()}")
             raise
     
-    #################################################################################
-    # Funcs for raw mesh extraction and conversion.
-    #################################################################################
     @property
     def extracted_meshes(self):
         if not self._extracted_mesh_dict: return {}
         return {category: data['mesh'] for category, data in self._extracted_mesh_dict.items()}
 
     def _label_has_extracted_meshes(self):
-        files = list(self.extraction_dir.glob('*.ply'))
+        files = list(self.transformed_dir.glob('*.ply'))
         return len(files) > 0   
     
     def extract_meshes(self):
@@ -228,16 +222,17 @@ class DataHandler:
         
         # Summarise created files
         logger.info("Converted .bin files to .ply files.")
-      
-    def _transform_meshes_o3d(self):
+
+    def _transform_meshes_open3d(self, recenter_origin=True):
         """
         Takes the extracted .ply meshes, swaps z-y axes while maintaining chirality, rescales from cm to m,
-        and recenters all meshes so that the center of their combined AABB is at (0, 0, 0).
+        and recenters all meshes so that the center of their combined AABB is at (0, 0, 0) and the lowest point in z is at 0.
+        Saves the transformed meshes in a subdirectory 'transformed'.
         """
         # List of input .ply files with relative paths
         ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
         logger.info("Transforming meshes...")
-    
+
         # Transformation matrix to switch Y and Z axes, reverse X axis, and scale by 0.01
         transform_matrix = np.array([
             [-0.01,  0,     0,    0],  # Reverse X axis and scale by 0.01
@@ -245,128 +240,57 @@ class DataHandler:
             [0,   0.01,     0,    0],  # Z becomes Y and scale by 0.01
             [0,      0,     0,    1]   # Homogeneous coordinate
         ])
-    
-        # Initialize variables to compute the combined AABB
+
+        # Initialize variables to compute the combined AABB and global minimum z value
         global_min_bound = np.array([np.inf, np.inf, np.inf])
         global_max_bound = np.array([-np.inf, -np.inf, -np.inf])
-    
-        # Step 1: Compute the combined AABB over all meshes
-        meshes = []  # Store meshes for later processing
+        global_min_z = np.inf  # Initialize the global minimum Z value
+
+        # List to store loaded meshes
+        meshes = []
+
+        # Create 'transformed' subdirectory if it doesn't exist
+        transformed_dir = self.transformed_dir
+        transformed_dir.mkdir(exist_ok=True)
+
+        # Step 1: Load meshes, apply initial transformations, and compute global bounds
         for ply_file in ply_files:
             mesh = o3d.io.read_triangle_mesh(ply_file.as_posix())
+
+            print("Before transformation:")
+            print(mesh)
+            print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
+
             mesh.compute_vertex_normals()
             mesh.transform(transform_matrix)  # Apply initial transformation
-            
-            # Update global AABB
+
+            # Update global AABB and minimum Z value
             min_bound = np.asarray(mesh.get_min_bound())
             max_bound = np.asarray(mesh.get_max_bound())
             global_min_bound = np.minimum(global_min_bound, min_bound)
             global_max_bound = np.maximum(global_max_bound, max_bound)
-            
-            meshes.append((mesh, ply_file))  # Store the mesh and its corresponding file for later processing
-    
-        # Step 2: Calculate the center of the global AABB
+            global_min_z = min(global_min_z, min_bound[2])  # Update the global minimum Z
+
+            # Store the mesh object in the list
+            meshes.append(mesh)
+
+        # Calculate the center of the global AABB
         aabb_center = (global_min_bound + global_max_bound) / 2
-    
-        # Step 3: Recenter each mesh so that the AABB center is at (0, 0, 0)
-        for mesh, ply_file in meshes:
-            # Translate mesh to center of global AABB
-            mesh.translate(-aabb_center)
-            # Overwrite the .ply file with the transformed mesh
-            o3d.io.write_triangle_mesh(ply_file.as_posix(), mesh)      
-        logger.info("Mesh transformation complete!")
 
-
-    def _transform_meshes(self):
-        """
-        Takes the extracted .ply meshes, swaps z-y axes while maintaining chirality, rescales from cm to m,
-        and recenters all meshes so that the center of their combined AABB is at (0, 0, 0).
-        """
-        # List of input .ply files with relative paths
-        ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
-        logger.info("Transforming meshes...")
-
-        # Transformation matrix to switch Y and Z axes, reverse X axis, and scale by 0.01
-        transform_matrix = vtk.vtkTransform()
-        transform_matrix.Scale(-0.01, 0.01, 0.01)  # Scale and reverse x-axis
-        transform_matrix.RotateWXYZ(90, 1, 0, 0)   # Y becomes Z
-        transform_matrix.RotateWXYZ(90, 0, 0, 1)   # Z becomes Y
-
-        # Initialize variables to compute the combined AABB
-        global_min_bound = np.array([np.inf, np.inf, np.inf])
-        global_max_bound = np.array([-np.inf, -np.inf, -np.inf])
+        # Step 2: Translate each mesh, recenter, adjust Z, and save to the 'transformed' directory
+        for mesh, ply_file in zip(meshes, ply_files):
+            # Translate mesh to recenter the global AABB and set minimum Z to 0
+            if recenter_origin:
+                mesh.translate(-aabb_center)  # Recenter to (0, 0, 0)
+                mesh.translate([0, 0, -global_min_z])  # Set minimum Z to 0
+            print("After transformation:")
+            print(mesh)
+            print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
+            # Save the transformed mesh to the 'transformed' directory
+            output_file = transformed_dir / ply_file.name
+            o3d.io.write_triangle_mesh(output_file.as_posix(), mesh)
         
-        # Step 1: Compute the combined AABB over all meshes
-        meshes = []  # Store meshes for later processing
-        for ply_file in ply_files:
-            logger.info(f"Reading mesh from {ply_file}...")
-
-            # Read mesh using VTK
-            mesh = read_ply_mesh(ply_file.as_posix(), compute_normals=True)
-            
-            if mesh is None:
-                logger.error(f"Failed to read mesh from {ply_file}.")
-                continue
-
-            # Apply initial transformation
-            transform_filter = vtk.vtkTransformPolyDataFilter()
-            transform_filter.SetInputData(mesh)
-            transform_filter.SetTransform(transform_matrix)
-            transform_filter.Update()
-
-            transformed_mesh = transform_filter.GetOutput()
-
-            if transformed_mesh is None:
-                logger.error(f"Transformation failed for mesh {ply_file}.")
-                continue
-            
-            # Update global AABB
-            bounds = transformed_mesh.GetBounds()
-            logger.info(f"Bounds for {ply_file}: {bounds}")
-
-            min_bound = np.array([bounds[0], bounds[2], bounds[4]])
-            max_bound = np.array([bounds[1], bounds[3], bounds[5]])
-            global_min_bound = np.minimum(global_min_bound, min_bound)
-            global_max_bound = np.maximum(global_max_bound, max_bound)
-
-            # Store the mesh and its corresponding file for later processing
-            meshes.append((transformed_mesh, ply_file))
-
-        # Step 2: Calculate the center of the global AABB
-        aabb_center = (global_min_bound + global_max_bound) / 2
-        logger.info(f"Global AABB center: {aabb_center}")
-
-        # Step 3: Recenter each mesh so that the AABB center is at (0, 0, 0)
-        for mesh, ply_file in meshes:
-            logger.info(f"Recentering mesh for {ply_file}...")
-
-            # Translate mesh to center of global AABB
-            translate_transform = vtk.vtkTransform()
-            translate_transform.Translate(-aabb_center)
-
-            translate_filter = vtk.vtkTransformPolyDataFilter()
-            translate_filter.SetInputData(mesh)
-            translate_filter.SetTransform(translate_transform)
-            translate_filter.Update()
-
-            recentered_mesh = translate_filter.GetOutput()
-
-            if recentered_mesh is None:
-                logger.error(f"Recentering failed for mesh {ply_file}.")
-                continue
-
-            # Write the transformed mesh back to the .ply file
-            writer = vtk.vtkPLYWriter()
-            writer.SetFileName(ply_file.as_posix())
-            writer.SetInputData(recentered_mesh)
-            success = writer.Write()
-
-            if not success:
-                logger.error(f"Failed to write transformed mesh to {ply_file}.")
-            else:
-                logger.info(f"Successfully wrote transformed mesh to {ply_file}.")
-
-        logger.info("Mesh transformation complete!")
+        logger.info(f"Mesh transformation complete! Transformed files saved in '{transformed_dir}'.")
 
     def create_meshes(self):
         """
@@ -375,16 +299,13 @@ class DataHandler:
         self._prepare_mesh_extraction()
         self._split_bin_by_category()
         self._convert_bin_to_ply()
-        self._transform_meshes_o3d()
-
-    #################################################################################
-    # Funcs for loading saved extracted meshes
-    #################################################################################   
+        self._transform_meshes_open3d()
+ 
     def load_extracted_meshes(self):
         """
         Loads the processed meshes and stores the file paths and loaded meshes in the category dict.
         """
-        ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
+        ply_files = [f for f in self.transformed_dir.iterdir() if f.suffix == '.ply']
         for file_path in ply_files:           
             file_stem = file_path.stem.upper()
             for category in CATEGORIES:
@@ -400,11 +321,11 @@ class DataHandler:
         """
         Loads the processed meshes using VTK and stores the file paths and loaded meshes in the category dict.
         """
-        ply_files = [f for f in self.extraction_dir.iterdir() if f.suffix == '.ply']
+        ply_files = [f for f in self.transformed_dir.iterdir() if f.suffix == '.ply']
         for file_path in ply_files:           
             file_stem = file_path.stem.upper()
             for category in CATEGORIES:
-                if category in file_stem:  # Match based on the category prefix
+                if category in file_stem and category not in self._extracted_mesh_dict:  # Match based on the category prefix
                     self._extracted_mesh_dict[category] = {}
                     self._extracted_mesh_dict[category]["file"] = file_path
 
@@ -445,9 +366,6 @@ class DataHandler:
             self.create_meshes()
         self.load_extracted_meshes_vtk()
         
-    #################################################################################
-    # Funcs for train/test/eval folds
-    #################################################################################   
     def _ensure_split_dirs(self):
         for dir_path in self.split_dirs.values():
             dir_path.mkdir(parents=True, exist_ok=True)
@@ -466,10 +384,7 @@ class DataHandler:
                 p = save_dir / f"{category}.ply"
                 o3d.io.write_triangle_mesh(p.as_posix(), mesh)
 
-    #################################################################################
-    # Funcs for saving clouds
-    #################################################################################
-    def generate_and_save_fold_clouds(self, resolution):
+    def generate_and_save_fold_clouds(self, resolution, poisson_radius):
         """
         Generates points from the fold meshes.
         """
@@ -490,7 +405,7 @@ class DataHandler:
                 output_name = output_dir / f"{in_f.stem}.las"
                 gt_value = int(in_f.stem.split('_')[0])
                 sampler = MeshSampler(mesh_path=in_f, gt_value=gt_value)
-                sampler.generate_cloud(resolution=resolution)
+                sampler.generate_cloud(resolution=resolution, poisson_radius=poisson_radius)
                 sampler.save(output_name)
 
 
@@ -675,13 +590,11 @@ class MeshAnalyser:
         """
         Function to generate splits with a special algorithm for the library dataset.
         """
-        cell_width = 2.5
-        category_cells = divide_all_categories_into_cells(self.meshes, cell_width)
-        transformed_category_cells = transform_cells(category_cells)
-        splits = split_all_categories(transformed_category_cells, weights=weights)
-        processed_meshes = process_splits(splits, cell_width, seed=random_seed)
-        return splits, processed_meshes
-
+        category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
+        # transformed_category_cells = transform_cells(category_cells)
+        splits = split_all_categories(category_cells, weights=weights)
+        process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
+        return splits
 
 
 #################################################################################
