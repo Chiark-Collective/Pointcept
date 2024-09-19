@@ -5,6 +5,7 @@ import sys
 import random
 import re
 
+import vtk
 import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,6 +37,7 @@ def merge_and_save_cells(dh, splits):
     Returns:
         None: The function saves the merged meshes directly to disk.
     """
+    dh._ensure_split_dirs()
     # Iterate over the splits dictionary (e.g., 'train', 'test', 'eval')
     for fold, categories in splits.items():
         # Get the appropriate directory for the fold from DataHandler
@@ -52,6 +54,8 @@ def merge_and_save_cells(dh, splits):
                 combined_mesh = combined_mesh.merge(cell)
                 cell_counter += 1
 
+            if combined_mesh.n_points == 0 and combined_mesh.n_cells == 0:
+                logger.warn(f"Fold: {fold}, Category: {category} has an empty combined mesh!")
             combined_mesh.GetPointData().SetActiveNormals('Normals')
 
             output_file = fold_dir / f"{category.lower()}.ply"           
@@ -62,7 +66,7 @@ def merge_and_save_cells(dh, splits):
             writer.SetColorModeToDefault()  # Ensure colors are written from the Scalars
             writer.SetArrayName('RGB')
             writer.Write()
-        print(f"for fold {fold}, processed {cell_counter} cells")
+        logger.info(f"For fold {fold}, merged {cell_counter} cells in total.")
 
 
 def process_splits_pyvista(splits, cell_width, seed=None):
@@ -156,9 +160,12 @@ def divide_all_categories_into_cells_pyvista(meshes_dict, cell_width):
     Returns:
         dict: A dictionary with each category mapping to a list of its cell meshes.
     """
+    logger.info("Now dividing meshes into cells, this can take some time...")
     category_cells = {}
     for category, mesh in meshes_dict.items():
+        logger.info(f"Splitting category: {category}")
         category_cells[category] = split_mesh_into_cells_pyvista(mesh, cell_width)
+    logger.info(f"All category meshes split.")
     return category_cells
 
 

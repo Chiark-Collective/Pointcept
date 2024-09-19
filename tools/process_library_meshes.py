@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
-from pointcept.supplemental.mesh_processing import DataHandler, MeshAnalyser, MeshSampler, set_data_root
+from pointcept.supplemental.mesh_processing import DataHandler, MeshAnalyser, set_data_root, merge_and_save_cells
 
-def main(data_root, resolution, library_bin_file=None):
+def main(data_root, library_bin_file=None, cell_width=2.0):
     # Set the root directory for data
     set_data_root(data_root)
     
@@ -18,11 +18,9 @@ def main(data_root, resolution, library_bin_file=None):
     # Now we'll split and shuffle the meshes randomly
     # then save them under the data root
     analyser = MeshAnalyser(d)
-    splits, full_meshes = analyser.generate_library_splits()
-    d.save_splits(splits)
+    splits = analyser.generate_library_splits(cell_width=cell_width)
+    merge_and_save_cells(d, splits)
 
-    # Generate and save point clouds based on the specified resolution
-    d.generate_and_save_fold_clouds(resolution=resolution)
 
 if __name__ == "__main__":
     # Setup argument parser
@@ -31,13 +29,12 @@ if __name__ == "__main__":
     # Adding arguments
     parser.add_argument("--data-root", type=str, required=True,
                         help="The root directory where the data should be stored.")
-    parser.add_argument("--resolution", type=float, required=True,
-                        help="The resolution for generating point clouds.")
     parser.add_argument("--library-bin-file", type=str, default=None,
                         help="Optional path to the .bin file for the library.")
-
+    parser.add_argument("--cell-width", type=float, required=False,
+                        help="The cell width to use when splitting and jumbling the library data.")
     # Parse arguments
     args = parser.parse_args()
 
     # Call the main function with parsed arguments
-    main(args.data_root, args.resolution, args.library_bin_file)
+    main(args.data_root, args.library_bin_file, args.cell_width)

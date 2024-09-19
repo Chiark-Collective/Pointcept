@@ -8,6 +8,7 @@ import gc
 
 import vtk
 import laspy
+import torch
 import open3d as o3d
 import pyvista as pv
 import numpy as np
@@ -16,9 +17,8 @@ from pathlib import Path
 
 from vtk.util.numpy_support import vtk_to_numpy
 
-from pointcept.supplemental.utils import get_category_list
-from pointcept.supplemental.utils2 import read_ply_mesh
-from pointcept.supplemental.preprocessing import *
+from pointcept.supplemental.utils import get_category_list, read_ply_mesh
+from pointcept.supplemental.library_funcs import *
 
 
 # Set up logging
@@ -108,6 +108,12 @@ class DataHandler:
         for path in [self.mesh_dir, self.raw_mesh_dir, self.extraction_dir,
                      self.split_dir, self.clouds_root] + list(self.split_dirs.values()):
             path.mkdir(parents=True, exist_ok=True)
+
+        self._ensure_split_dirs()
+
+    def _ensure_split_dirs(self):
+        for dir_path in self.split_dirs.values():
+            dir_path.mkdir(parents=True, exist_ok=True)
 
     def set_bin_file(self, bin_file):
         """
@@ -257,9 +263,9 @@ class DataHandler:
         for ply_file in ply_files:
             mesh = o3d.io.read_triangle_mesh(ply_file.as_posix())
 
-            print("Before transformation:")
-            print(mesh)
-            print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
+            # print("Before transformation:")
+            # print(mesh)
+            # print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
 
             mesh.compute_vertex_normals()
             mesh.transform(transform_matrix)  # Apply initial transformation
@@ -283,9 +289,9 @@ class DataHandler:
             if recenter_origin:
                 mesh.translate(-aabb_center)  # Recenter to (0, 0, 0)
                 mesh.translate([0, 0, -global_min_z])  # Set minimum Z to 0
-            print("After transformation:")
-            print(mesh)
-            print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
+            # print("After transformation:")
+            # print(mesh)
+            # print("Bounding Box:", mesh.get_axis_aligned_bounding_box())
             # Save the transformed mesh to the 'transformed' directory
             output_file = transformed_dir / ply_file.name
             o3d.io.write_triangle_mesh(output_file.as_posix(), mesh)
@@ -365,11 +371,7 @@ class DataHandler:
             logger.info(f"Label {self.label} does not currently have extracted meshes. Attempting now.")
             self.create_meshes()
         self.load_extracted_meshes_vtk()
-        
-    def _ensure_split_dirs(self):
-        for dir_path in self.split_dirs.values():
-            dir_path.mkdir(parents=True, exist_ok=True)
-    
+           
     def save_splits(self, split_dict):
         """
         Func to save any splits as .ply mesh files in train/test/eval dirs.
@@ -384,29 +386,58 @@ class DataHandler:
                 p = save_dir / f"{category}.ply"
                 o3d.io.write_triangle_mesh(p.as_posix(), mesh)
 
-    def generate_and_save_fold_clouds(self, resolution, poisson_radius):
+    def generate_and_save_fold_clouds(self, resolution, poisson_radius, output_format='.las', save_all_formats=False):
         """
-        Generates points from the fold meshes.
+        Generates points from the fold meshes and saves them in the specified format.
+        If save_all_formats=True, it saves both .las and .pth formats.
         """
-        resolution_root = self.clouds_root / f"resolution_{resolution}"
+        valid_formats = ['.las', '.pth']
+        if output_format not in valid_formats:
+            raise ValueError(f"extension {output_format} not supported. Valid formats: {valid_formats}")
+
+        resolution_root = self.clouds_root / f"res{resolution}_pr{poisson_radius}"
         label_root = resolution_root / self.label
+        
+        # Scrub the label_root directory (remove it if it exists and recreate it)
+        if label_root.exists():
+            shutil.rmtree(label_root)
+
         split_cloud_dirs = {
             'train': label_root / "train",
             'test': label_root / "test",
             'eval': label_root / "eval"
-            }
-        resolution_root.mkdir(parents=True, exist_ok=True)
+        }
+        # resolution_root.mkdir(parents=True, exist_ok=True)
         for path in [resolution_root, label_root] + list(split_cloud_dirs.values()):
             path.mkdir(parents=True, exist_ok=True)
-    
+
         for fold, output_dir in split_cloud_dirs.items():
             mesh_dir = self.split_dirs[fold]
             for in_f in mesh_dir.glob('*.ply'):
-                output_name = output_dir / f"{in_f.stem}.las"
+
                 gt_value = int(in_f.stem.split('_')[0])
                 sampler = MeshSampler(mesh_path=in_f, gt_value=gt_value)
                 sampler.generate_cloud(resolution=resolution, poisson_radius=poisson_radius)
-                sampler.save(output_name)
+
+                # Save in the specified output format
+                if output_format == '.las' or save_all_formats:
+                    las_output_name = output_dir / f"{in_f.stem}.las"
+                    sampler.save(las_output_name)
+
+                if output_format == '.pth' or save_all_formats:
+                    pth_output_name = output_dir / f"{in_f.stem}.pth"
+                    sampler.save(pth_output_name)
+
+            # Also generate a combined file for the fold in the requested format(s)
+            if output_format == '.las' or save_all_formats:
+                las_in_files = list(output_dir.glob('*.las'))
+                combined_las_name = output_dir / "combined.las"
+                combine_las_files(input_paths=las_in_files, output_path=combined_las_name)
+
+            if output_format == '.pth' or save_all_formats:
+                pth_in_files = list(output_dir.glob('*.pth'))
+                combined_pth_name = output_dir / "combined.pth"
+                combine_pth_files(input_paths=pth_in_files, output_path=combined_pth_name)
 
 
 #################################################################################
@@ -592,8 +623,10 @@ class MeshAnalyser:
         """
         category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
         # transformed_category_cells = transform_cells(category_cells)
+        logger.info("Cell division complete, now assigning to folds and transforming...")
         splits = split_all_categories(category_cells, weights=weights)
         process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
+        logger.info("Fold allocation complete!")
         return splits
 
 
@@ -779,7 +812,7 @@ class MeshSampler:
         if file_extension == '.las':
             self._save_as_las(p)
         elif file_extension == '.pth':
-            self._save_as_pth()
+            self._save_as_pth(p)
         else:
             raise ValueError(f"Unsupported file extension: {file_extension}. Please use '.las' or '.pth'.")
 
@@ -829,9 +862,139 @@ class MeshSampler:
     
     def _save_as_pth(self, output_path):
         """
-        Saves the point cloud data in PTH format.
+        Saves the point cloud data in PyTorch .pth format.
 
         Args:
-            output_path (Path): Path to save the PTH file.
+            output_path (Path): Path to save the .pth file.
         """
-        pass
+        # Extract points, colors, normals, and other relevant data from the class
+        points = self._points  # Nx3 array of coordinates (x, y, z)
+        colors = self._colors  # Nx3 array of colors (r, g, b) normalized [0, 1]
+        normals = self._normals  # Nx3 array of normal vectors
+        gt_value = self._gt_value  # Ground truth value or placeholder
+
+        # Prepare the coordinate array (float32)
+        coord = points.astype(np.float32)
+
+        # Prepare the color array (float32) - assuming RGB is normalized [0, 1]
+        color = (colors * 255).astype(np.float32) / 256.0  # Normalize to the same range as the example
+
+        # Dictionary to store the data
+        data = {
+            'coord': coord,
+            'color': color,
+            'scene_id': str(output_path.stem)  # Use the filename (without extension) as scene_id
+        }
+
+        # Add normals if present
+        if normals is not None:
+            data['normal'] = normals.astype(np.float32)
+
+        # Optionally, add semantic ground truth data if available
+        if gt_value is not None:
+            # Assuming gt_value is scalar, we broadcast it for each point (replace if different per point)
+            semantic_gt20 = np.broadcast_to(gt_value, (points.shape[0],)).astype(np.int64)
+            data['gt'] = semantic_gt20
+
+        # Save the dictionary as a .pth file
+        torch.save(data, output_path.as_posix())
+        logger.info(f"Saved point cloud to {output_path} in .pth format.")
+
+
+def combine_pth_files(input_paths, output_path):
+    """
+    Combines multiple .pth files into one .pth file while handling the process incrementally.
+
+    Args:
+        output_path (str or Path): The path where the combined .pth file will be saved.
+        input_paths (list of str or Path): List of paths (either str or Path) to .pth files to be combined.
+    """
+    # Normalize the output_path to a Path object
+    output_path = Path(output_path)
+    
+    combined_data = {
+        'coord': [],
+        'color': [],
+        'normal': [],
+        'gt': [],
+        'scene_ids': []
+    }
+
+    # Process each .pth file incrementally
+    for file_path in input_paths:
+        # Normalize the input path to a Path object
+        file_path = Path(file_path)
+
+        # Load the .pth file
+        data = torch.load(file_path)
+
+        # Append the data from this file to the combined data
+        combined_data['coord'].append(data['coord'])
+        combined_data['color'].append(data['color'])
+        
+        if 'normal' in data:
+            combined_data['normal'].append(data['normal'])
+        
+        if 'gt' in data:
+            combined_data['gt'].append(data['gt'])
+        
+        combined_data['scene_ids'].append(data['scene_id'])
+
+    # Concatenate the arrays (out-of-core behavior depends on NumPy's internal optimizations)
+    combined_data['coord'] = np.concatenate(combined_data['coord'], axis=0)
+    combined_data['color'] = np.concatenate(combined_data['color'], axis=0)
+    
+    if combined_data['normal']:
+        combined_data['normal'] = np.concatenate(combined_data['normal'], axis=0)
+    
+    if combined_data['gt']:
+        combined_data['gt'] = np.concatenate(combined_data['gt'], axis=0)
+
+    # Save the combined data to a new .pth file
+    torch.save(combined_data, output_path.as_posix())
+    logger.info(f"Combined data saved to {output_path}")
+
+
+def combine_las_files(input_paths, output_path):
+    """
+    Combines multiple LAS files into one, ensuring that point positions are distinct by adjusting for local offsets.
+    
+    Args:
+        output_path (str or Path): The path where the combined LAS file will be saved.
+        input_paths (list of str or Path): List of paths (either str or Path) to LAS files to be combined.
+    """
+    output_path = Path(output_path)
+
+    # Open the first LAS file to initialize the header for the output file
+    with laspy.open(input_paths[0], mode='r') as first_file:
+        header = laspy.LasHeader(version=first_file.header.version, point_format=first_file.header.point_format)
+        # Keep the scaling and offsets from the first file as the reference for the combined file
+        header.x_scale = first_file.header.x_scale
+        header.y_scale = first_file.header.y_scale
+        header.z_scale = first_file.header.z_scale
+        header.offsets = first_file.header.offsets  # Keep the first file's offsets
+
+    # Open the output file in write mode
+    with laspy.open(output_path, mode='w', header=header) as out_file:
+        total_points = 0
+
+        # Process each input LAS file incrementally
+        for file_path in input_paths:
+            file_path = Path(file_path)
+
+            # Open the LAS file for reading
+            with laspy.open(file_path, mode='r') as in_file:
+                # Get the scale and offset of the current LAS file
+                x_offset, y_offset, z_offset = in_file.header.x_offset, in_file.header.y_offset, in_file.header.z_offset
+
+                for points in in_file.chunk_iterator(1000000):  # Process in chunks of 1,000,000 points
+                    # Convert the local coordinates to global coordinates using this file's offsets
+                    points.x = points.x + (x_offset - header.x_offset)
+                    points.y = points.y + (y_offset - header.y_offset)
+                    points.z = points.z + (z_offset - header.z_offset)
+
+                    # Write the points in global coordinates to the output file
+                    out_file.write_points(points)
+                    total_points += len(points)
+
+        logger.info(f"Combined LAS file saved to {output_path} with {total_points} points.")

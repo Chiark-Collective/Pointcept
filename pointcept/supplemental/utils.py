@@ -1,7 +1,5 @@
-"""
-Submodule to supplement Pointcept utils for heritage processing and development.
-"""
 import os
+import vtk
 import laspy
 import torch
 import numpy as np
@@ -42,59 +40,123 @@ def in_docker():
     return os.getenv('INSIDE_POINTCEPT_DOCKER', 'false') == 'true'
 
 
-def get_data_root2():
-    """
-    Loads environment variables, ensures 'DATA_ROOT' exists, and returns its path.
-    Exits with an error if 'DATA_ROOT' is not set or the directory cannot be created.
-    
-    Returns:
-        str: Path to the 'DATA_ROOT' directory.
-    """
-    load_dotenv()  # Ensure environment variables are loaded
-    data_root = os.getenv('DATA_ROOT')
-    if data_root is None:
-        print("ERROR: DATA_ROOT environment variable not found.")
-        exit(1)  # Exit if DATA_ROOT is not found
-        # Make the DATA_ROOT directory if it doesn't exist
-    try:
-        os.makedirs(data_root, exist_ok=True)
-        os.makedirs(data_root+'/results', exist_ok=True)
-    except Exception as e:
-        print(f"ERROR: Unable to create directory {data_root}. {e}")
-        exit(1)
-    return data_root
 
-def ensure_data_root():
-    data_root = './data'
-    try:
-        os.makedirs(data_root, exist_ok=True)
-    except Exception as e:
-        print(f"ERROR: Unable to create directory {data_root}. {e}")
-        exit(1)
-    return data_root
 
-def ensure_category_dirs(category):
+def read_ply_mesh(file_path, compute_normals=True):
     """
-    Creates necessary directories for a specified category within a fixed root data path.
-    
+    Reads a .ply mesh from a file path and optionally computes normals.
+
     Args:
-        category (str): The name of the category for which to create directories.
+        file_path (str): Path to the .ply file.
+        compute_normals (bool): If True, computes normals for the mesh. Default is True.
 
     Returns:
-        str: The path to the newly created category directory, which includes a results subdirectory.
-
-    Raises:
-        Exception: If directory creation fails, prints an error message and exits the program.
+        vtk.vtkPolyData: A VTK object representing the loaded mesh, optionally with normals computed.
     """
-    data_root = './data'
-    category_root = data_root + f'/{category}'
-    try:
-        os.makedirs(data_root, exist_ok=True)
-        os.makedirs(category_root, exist_ok=True)
-    except Exception as e:
-        print(f"ERROR: Unable to create directory {data_root}. {e}")
-        exit(1)
-    return category_root
+    # Read the PLY file
+    reader = vtk.vtkPLYReader()
+    reader.SetFileName(file_path)
+    reader.Update()
+
+    # Get the output as vtkPolyData
+    polyData = reader.GetOutput()
+
+    # Optionally compute normals for the mesh
+    if compute_normals:
+        normals_filter = vtk.vtkPolyDataNormals()
+        normals_filter.SetInputData(polyData)
+        normals_filter.ComputePointNormalsOn()
+        normals_filter.Update()
+        return normals_filter.GetOutput()
+
+    # Return the vtkPolyData object without normals
+    return polyData
+
+def render_vtk_mesh(mesh, window_name="VTK Mesh Viewer", background_color=(0.1, 0.2, 0.4)):
+    """
+    Renders a vtkPolyData mesh using VTK in a Jupyter notebook.
+
+    Args:
+        mesh (vtk.vtkPolyData): The vtkPolyData mesh to render.
+        window_name (str): The title of the render window.
+        background_color (tuple): Background color in RGB format.
+    """
+    # Create a mapper and actor for the mesh
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(mesh)
+
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(1.0, 1.0, 1.0)  # Set mesh color to white for better visibility
+    actor.GetProperty().SetEdgeVisibility(1)  # Optional: show edges
+    actor.GetProperty().SetLineWidth(1.0)  # Optional: line width for edges
+
+    # Create a renderer and render window
+    renderer = vtk.vtkRenderer()
+    render_window = vtk.vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+    render_window.SetSize(800, 600)  # Set window size
+    render_window.SetWindowName(window_name)
+
+    # Set the background color
+    renderer.SetBackground(*background_color)
+
+    # Add actor to the renderer
+    renderer.AddActor(actor)
+
+    # Create a render window interactor
+    render_window_interactor = vtk.vtkRenderWindowInteractor()
+    render_window_interactor.SetRenderWindow(render_window)
+
+    # Start the rendering loop
+    render_window.Render()
+    render_window_interactor.Start()
+
+
+def read_las_file(file_path):
+    """
+    Reads and prints key information from a LAS file, including metadata, header details, and a sample of point data,
+    with additional handling for normals and ground truth scalar fields if present.
+    
+    Parameters:
+        file_path (str): The path to the LAS file to be read.
+    
+    Returns:
+        None: Outputs directly to the console.
+    """
+    with laspy.open(file_path) as file:
+        header = file.header
+
+        # Print file version and general header information
+        print(f"LAS File Version: {header.version}")
+        if hasattr(header, 'file_signature'):
+            print(f"File Signature: {header.file_signature}")
+        print(f"Point Format: {header.point_format}")
+        print(f"Number of Point Records: {header.point_count}")
+        print(f"Number of Points by Return: {header.number_of_points_by_return}")
+        
+        if hasattr(header, 'bounds'):
+            print(f"Bounding Box: {header.bounds}\n")
+        else:
+            print("Bounding Box: Not available\n")
+
+        # Print initial point format details
+        points = next(file.chunk_iterator(1))
+        print("Point Format Details:")
+        print(f"  - Dimension names: {', '.join(points.point_format.dimension_names)}")
+        print(f"  - Extra dimension names: {', '.join(points.point_format.extra_dimension_names)}")
+        print(f"  - Point size in bytes: {points.point_size}\n")
+
+        # Read the entire file
+        las = file.read()
+
+        # Accessing and printing specific data dimensions
+        print("Sample Data Points:")
+        sample_count = 10  # Define how many samples to show
+        for name in ["x", "y", "z", "red", "intensity", "classification", "gt", "NormalX", "NormalY", "NormalZ"]:
+            if hasattr(las, name):
+                print(f"  - Sample {name.capitalize()} values: {getattr(las, name)[:sample_count]}")
+
 
 def print_dict_structure(data, indent=0):
     """
@@ -140,113 +202,3 @@ def print_dict_structure(data, indent=0):
             print(type(value))
 
 
-def read_las_file(file_path):
-    """
-    Reads and prints key information from a LAS file, including metadata, header details, and a sample of point data.
-    
-    This function opens a LAS file, reads its header to extract file metadata such as the LAS version and point format,
-    and then reads point data to provide a sample of coordinates, intensities, and classifications.
-    
-    Parameters:
-        file_path (str): The path to the LAS file to be read.
-    
-    Returns:
-        None: Outputs directly to the console.
-    """
-    with laspy.open(file_path) as file:
-        # Get the header to access metadata
-        header = file.header
-
-        # Print file version and general header information
-        print(f"LAS File Version: {header.version}")
-        if hasattr(header, 'file_signature'):
-            print(f"File Signature: {header.file_signature}")
-        print(f"Point Format: {header.point_format}")
-        print(f"Number of Point Records: {header.point_count}")
-        print(f"Number of Points by Return: {header.number_of_points_by_return}")
-        
-        # Safely print bounding box if it exists
-        if hasattr(header, 'bounds'):
-            print(f"Bounding Box: {header.bounds}\n")
-        else:
-            print("Bounding Box: Not available\n")
-
-        # Initial point format details
-        points = next(file.chunk_iterator(1))
-        print("Point Format Details:")
-        print(f"  - Dimension names: {', '.join(points.point_format.dimension_names)}")
-        print(f"  - Extra dimension names: {', '.join(points.point_format.extra_dimension_names)}")
-        print(f"  - Point size in bytes: {points.point_size}\n")
-
-        # Read the point records from the file
-        las = file.read()
-
-        # Accessing specific data dimensions
-        points = las.points
-        x_coordinates = las.x
-        y_coordinates = las.y
-        z_coordinates = las.z
-        red_coordinates = las.red
-
-        # Optionally, access other attributes like intensity, classification, etc.
-        intensity = las.intensity
-        classifications = las.classification
-
-        # Print some basic information about the point data
-        print("Sample Data Points:")
-        print(f"  - Sample X coordinates: {x_coordinates[:10]}")  # Print first 10 for brevity
-        print(f"  - Sample Y coordinates: {y_coordinates[:10]}")
-        print(f"  - Sample Z coordinates: {z_coordinates[:10]}")
-        print(f"  - Sample red values: {red_coordinates[:10]}")
-        print(f"  - Sample intensity values: {intensity[:10]}")
-        print(f"  - Sample classifications: {classifications[:10]}")
-
-def read_las_file2(file_path):
-    """
-    Reads and prints key information from a LAS file, including metadata, header details, and a sample of point data,
-    with additional handling for normals and ground truth scalar fields if present.
-    
-    Parameters:
-        file_path (str): The path to the LAS file to be read.
-    
-    Returns:
-        None: Outputs directly to the console.
-    """
-    with laspy.open(file_path) as file:
-        header = file.header
-
-        # Print file version and general header information
-        print(f"LAS File Version: {header.version}")
-        if hasattr(header, 'file_signature'):
-            print(f"File Signature: {header.file_signature}")
-        print(f"Point Format: {header.point_format}")
-        print(f"Number of Point Records: {header.point_count}")
-        print(f"Number of Points by Return: {header.number_of_points_by_return}")
-        
-        if hasattr(header, 'bounds'):
-            print(f"Bounding Box: {header.bounds}\n")
-        else:
-            print("Bounding Box: Not available\n")
-
-        # Print initial point format details
-        points = next(file.chunk_iterator(1))
-        print("Point Format Details:")
-        print(f"  - Dimension names: {', '.join(points.point_format.dimension_names)}")
-        print(f"  - Extra dimension names: {', '.join(points.point_format.extra_dimension_names)}")
-        print(f"  - Point size in bytes: {points.point_size}\n")
-
-        # Read the entire file
-        las = file.read()
-
-        # Accessing and printing specific data dimensions
-        print("Sample Data Points:")
-        sample_count = 10  # Define how many samples to show
-        for name in ["x", "y", "z", "red", "intensity", "classification", "gt", "NormalX", "NormalY", "NormalZ"]:
-            if hasattr(las, name):
-                print(f"  - Sample {name.capitalize()} values: {getattr(las, name)[:sample_count]}")
-
-
-
-if __name__ == "__main__":
-    fp = '/data/sdd/training_v2.las'
-    read_las_file(fp)
