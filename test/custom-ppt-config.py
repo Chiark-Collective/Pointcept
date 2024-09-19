@@ -1,7 +1,7 @@
 ###############################################################################################
 # Data directory config.
 ###############################################################################################
-# my_data_root = "./data/qh/training_5cm_voxels_2x2x2"
+my_data_root = "./data/qh/training_5cm_voxels_2x2x2"
 # my_data_root = "./data/qh/training_slice_voxels_4x4x3"
 save_path = "exp/qh/training_zeroshot_curveball/semseg-pt-v3m1-1-ppt-extreme"  # WARNING: if this dir already exists, Pointcept will fail with a very esoteric error!
 
@@ -19,7 +19,7 @@ my_categories = [
     "railing",
     "rain water pipe",
     "OTHER",
-    ]
+]
 
 # my_categories = [
 #     'wall',
@@ -138,12 +138,10 @@ scheduler = dict(
 # Data config
 ###############################################################################################
 data = dict(
-
     # num_classes=20,
     ignore_index=-1,
     names=my_categories,
     num_classes=len(my_categories),
-
     train=dict(
         type="ConcatDataset",
         datasets=[

@@ -78,7 +78,7 @@ class TesterBase:
                 weight[key] = value
             # for k in weight:
             #     print(k)
-            print("DITCHING CLASS EMBEDDING")
+            # print("DITCHING CLASS EMBEDDING")
             weight.pop("class_embedding")
             model.load_state_dict(weight, strict=False)
             self.logger.info(

@@ -226,7 +226,7 @@ class PointPromptTraining(nn.Module):
         self.proj_head = nn.Linear(
             self.backbone_out_channels, clip_model.text_projection.shape[1]
         )
-        print(f"proj_head shape says {self.proj_head}")
+        # print(f"proj_head shape says {self.proj_head}")
         self.logit_scale = clip_model.logit_scale
 
         class_prompt = [self.template.replace("[x]", name) for name in self.categories]
@@ -251,7 +251,7 @@ class PointPromptTraining(nn.Module):
             )
         )
         data_dict["context"] = context
-        print(f"{context.shape}=")
+        # print(f"{context.shape}=")
         # raise ValueError
 
         # Get features from backbone
@@ -264,11 +264,11 @@ class PointPromptTraining(nn.Module):
         # Project features and compute similarities
         feat = self.proj_head(feat)
         feat = feat / feat.norm(dim=-1, keepdim=True)
-        print(f"{feat.shape=}")
+        # print(f"{feat.shape=}")
 
-        print(f"{self.class_embedding.shape=}")
+        # print(f"{self.class_embedding.shape=}")
         sim = feat @ self.class_embedding[:].t()
-        print(f"{sim.shape=}")
+        # print(f"{sim.shape=}")
 
         logit_scale = self.logit_scale.exp()
         seg_logits = logit_scale * sim
