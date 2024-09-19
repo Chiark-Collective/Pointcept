@@ -113,7 +113,7 @@ class LibraryDataset(Dataset):
         coord = data["coord"]
         color = data["color"]
         normal = data["normal"]
-        scene_id = data["scene_id"]
+        scene_id = data.get("scene_id", data_path.name)
         if "gt" in data.keys():
             segment = data["gt"].reshape([-1])
         else:
