@@ -20,6 +20,7 @@ from pointcept.engines.defaults import (
 )
 from pointcept.engines.test import TESTERS
 from pointcept.models.builder import MODELS
+from pointcept.utils.optimizer import OPTIMIZERS
 from .utils import (
     WeightFreezer,
     patch_cfg,
@@ -148,8 +149,8 @@ class PointPromptTrainingLoRA(nn.Module):
 
     def __init__(
         self,
-        base_model_config: Path,
         lora_config: dict,
+        base_model_config: Path = TRAINED_PPT_BASE_CONFIG,
         new_conditions: list[str] = ["Heritage"],
         condition_mapping: dict[str, str | None] | None = {"Heritage": "ScanNet"},
         device: str = "cuda",
@@ -226,14 +227,28 @@ def ppt_lora_config(
     }
 
 
-# create AdamW optimizer (for LoRA weights only)
-# optimizer = configure_adamw_lora(
-#     model,
-#     weight_decay,
-#     learning_rate,
-#     (beta1, beta2),
-#     device_type
-# )
 
+@MODELS.register_module()
+def build_ppt_lora_with_optimizer(cfg):
+    # Build the model
+    lora_config = ppt_lora_config(**cfg.lora_config)
+    model = PointPromptTrainingLoRA(
+        base_model_config=cfg.base_model_config,
+        lora_config=lora_config,
+        new_conditions=cfg.new_conditions,
+        condition_mapping=cfg.condition_mapping,
+        device=cfg.device
+    )
+    
+    # create AdamW optimizer (for LoRA weights only)
+    optimizer = configure_adamw_lora(
+        model,
+        weight_decay=cfg.optimizer.weight_decay,
+        learning_rate=cfg.optimizer.lr,
+        betas=cfg.optimizer.betas,
+        device=cfg.device
+    )
+    
+    return {"model": model, "optimizer": optimizer}
 
             
