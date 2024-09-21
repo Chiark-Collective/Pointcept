@@ -1,3 +1,5 @@
+
+
 """
 PTv3 + PPT
 """
@@ -30,27 +32,26 @@ HERITAGE_CATEGORIES = [
 
 # trainer
 train = dict(
-    type="DefaultTrainer",
+    type="LoRATrainer",
 )
 
+
 # model settings
-model_and_optimizer = dict(
-    type="build_ppt_lora_with_optimizer",
-    # base_model_config="path/to/your/base_cfg_file.py", # defaults to test/custom-ppt-config.py
-    lora_config=dict(
-        rank=10,
-        lora_alpha=20,
-        lora_dropout_p=0.0,
-    ),
-    new_conditions=["Heritage"],
-    condition_mapping=dict(Heritage="ScanNet"),
-    device="cuda",
-    # AdamW
-    optimizer=dict(
-        weight_decay=0.05,
-        lr=0.005,
-        betas=(0.9, 0.999)
-    )
+model = dict(
+    type="PPT-LoRA",
+    rank=10,
+    lora_alpha=20,
+    lora_dropout_p=0.0,
+    new_conditions = ["Heritage"],
+    condition_mapping = {"Heritage": "ScanNet"},
+    device = "cuda",
+)
+
+optimizer=dict(
+    type="AdamW",
+    weight_decay=0.05,
+    lr=0.005,
+    betas=(0.9, 0.999)
 )
 
 # scheduler settings

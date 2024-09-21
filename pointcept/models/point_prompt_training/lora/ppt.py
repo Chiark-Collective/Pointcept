@@ -1,5 +1,7 @@
 import logging
 import typing as ty
+import os
+from collections import OrderedDict
 from functools import partial, wraps
 from pathlib import Path
 from ordered_set import OrderedSet
@@ -15,12 +17,15 @@ from minlora import LoRAParametrization
 from spconv.pytorch.conv import SubMConv3d
 
 from pointcept.engines.defaults import (
+    create_ddp_model,
     default_argument_parser,
     default_config_parser,
 )
-from pointcept.engines.test import TESTERS
+import pointcept.utils.comm as comm
 from pointcept.models.builder import MODELS
+from pointcept.utils.env import get_random_seed
 from pointcept.utils.optimizer import OPTIMIZERS
+from pointcept.utils.config import Config
 from .utils import (
     WeightFreezer,
     patch_cfg,
@@ -37,15 +42,69 @@ REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 TRAINED_PPT_BASE_CONFIG = REPO_ROOT / "test/custom-ppt-config.py" 
 
 
+def build_model(cfg):
+    model = build_model(cfg.model)
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"Num params: {n_parameters}")
+    model = create_ddp_model(
+        model.cuda(),
+        broadcast_buffers=False,
+        find_unused_parameters=cfg.find_unused_parameters,
+    )
+    if os.path.isfile(cfg.weight):
+        logger.info(f"Loading weight at: {cfg.weight}")
+        checkpoint = torch.load(cfg.weight)
+        weight = OrderedDict()
+        for key, value in checkpoint["state_dict"].items():
+            if key.startswith("module."):
+                if comm.get_world_size() == 1:
+                    key = key[7:]  # module.xxx.xxx -> xxx.xxx
+            else:
+                if comm.get_world_size() > 1:
+                    key = "module." + key  # xxx.xxx -> module.xxx.xxx
+            weight[key] = value
+        # for k in weight:
+        #     print(k)
+        # print("DITCHING CLASS EMBEDDING")
+        weight.pop("class_embedding")
+        model.load_state_dict(weight, strict=False)
+        logger.info(
+            "=> Loaded weight '{}' (epoch {})".format(
+                cfg.weight, checkpoint["epoch"]
+            )
+        )
+    else:
+        raise RuntimeError("=> No checkpoint found at '{}'".format(cfg.weight))
+    return model
+
+
 def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, repo_root: Path = REPO_ROOT, device: str = "cuda") -> nn.Module:
     """load trained PPT model weights from config for application of LoRA / pdnorm expansion"""
     assert cfg_file.exists
     args = default_argument_parser().parse_args(args=["--config-file", f"{cfg_file}"])
     # this patching thing not stricty necessary, doesn't matter though because we throw everything away except
     # the model 
-    cfg = default_config_parser(args.config_file, args.options); cfg = patch_cfg(cfg, repo_root=repo_root)
-    tester = TESTERS.build(dict(type=cfg.test.type, cfg=cfg))
-    model = tester.model
+    print(TRAINED_PPT_BASE_CONFIG)
+    raise Exception
+    cfg = Config.fromfile(args.config_file, args.options)
+    if args.options is not None:
+        cfg.merge_from_dict(args.options)
+
+    if cfg.seed is None:
+        cfg.seed = get_random_seed()
+
+    cfg.data.train.loop = cfg.epoch // cfg.eval_epoch
+
+    os.makedirs(os.path.join(cfg.save_path, "model"), exist_ok=True)
+    if not cfg.resume:
+        cfg.dump(os.path.join(cfg.save_path, "config.py"))
+    cfg = patch_cfg(cfg, repo_root=repo_root)
+    print(cfg)
+    raise Exception
+    # cfg = default_config_parser(args.config_file, args.options); cfg = patch_cfg(cfg, repo_root=repo_root)
+    # tester = TESTERS.build(dict(type=cfg.test.type, cfg=cfg))
+    # model = tester.model
+    model = build_model(cfg)
     model.to(device)
     return model
 
@@ -149,7 +208,9 @@ class PointPromptTrainingLoRA(nn.Module):
 
     def __init__(
         self,
-        lora_config: dict,
+        rank: int = 10,
+        lora_alpha: int = 20,
+        lora_dropout_p: float = 0.,
         base_model_config: Path = TRAINED_PPT_BASE_CONFIG,
         new_conditions: list[str] = ["Heritage"],
         condition_mapping: dict[str, str | None] | None = {"Heritage": "ScanNet"},
@@ -158,10 +219,11 @@ class PointPromptTrainingLoRA(nn.Module):
         """Initialize the PointPromptTraining model."""
         super().__init__()
         self.base_model_config = base_model_config
-        self.lora_config = lora_config
+        self.lora_config = ppt_lora_config(rank, lora_alpha, lora_dropout_p)
         self.new_conditions = new_conditions
         self.condition_mapping = condition_mapping
         self.device = device
+
         self._load_base_model()
         self._inject_trainable_parameters()
 
@@ -187,9 +249,6 @@ class PointPromptTrainingLoRA(nn.Module):
 
     def forward(self, *args, **kwargs):
         return self.model.forward(*args, **kwargs)
-
-
-
 
 
 def ppt_lora_config(
@@ -227,28 +286,5 @@ def ppt_lora_config(
     }
 
 
-
-@MODELS.register_module()
-def build_ppt_lora_with_optimizer(cfg):
-    # Build the model
-    lora_config = ppt_lora_config(**cfg.lora_config)
-    model = PointPromptTrainingLoRA(
-        base_model_config=cfg.base_model_config,
-        lora_config=lora_config,
-        new_conditions=cfg.new_conditions,
-        condition_mapping=cfg.condition_mapping,
-        device=cfg.device
-    )
-    
-    # create AdamW optimizer (for LoRA weights only)
-    optimizer = configure_adamw_lora(
-        model,
-        weight_decay=cfg.optimizer.weight_decay,
-        learning_rate=cfg.optimizer.lr,
-        betas=cfg.optimizer.betas,
-        device=cfg.device
-    )
-    
-    return {"model": model, "optimizer": optimizer}
 
             

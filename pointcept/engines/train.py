@@ -300,3 +300,8 @@ class MultiDatasetTrainer(Trainer):
         )
         self.comm_info["iter_per_epoch"] = len(train_loader)
         return train_loader
+
+
+# fuck this framework
+from pointcept.supplemental.lora_trainer import LoRATrainer
+TRAINERS.register_module("LoRATrainer")(LoRATrainer)
