@@ -221,12 +221,13 @@ class Trainer(TrainerBase):
 
     def build_train_loader(self):
         train_data = build_dataset(self.cfg.data.train)
+        print(f"{train_data=}")
 
         if comm.get_world_size() > 1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
         else:
             train_sampler = None
-
+        print(f"{self.cfg.num_worker_per_gpu=}")
         init_fn = (
             partial(
                 worker_init_fn,
@@ -250,6 +251,9 @@ class Trainer(TrainerBase):
             drop_last=True,
             persistent_workers=True,
         )
+        print(f"{train_loader=}")
+        import joblib
+        joblib.dump(train_loader, "train_loader.joblib")
         return train_loader
 
     def build_val_loader(self):
