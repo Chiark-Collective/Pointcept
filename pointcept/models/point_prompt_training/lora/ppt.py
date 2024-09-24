@@ -22,7 +22,9 @@ from pointcept.engines.defaults import (
     default_config_parser,
 )
 import pointcept.utils.comm as comm
+# from pointcept.models import build_model
 from pointcept.models.builder import MODELS
+from pointcept.utils.registry import build_from_cfg
 from pointcept.utils.env import get_random_seed
 from pointcept.utils.optimizer import OPTIMIZERS
 from pointcept.utils.config import Config
@@ -39,11 +41,12 @@ logging.basicConfig(level=logging.INFO)
 
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
-TRAINED_PPT_BASE_CONFIG = REPO_ROOT / "test/custom-ppt-config.py" 
+# TRAINED_PPT_BASE_CONFIG = REPO_ROOT / "test/custom-ppt-config.py" 
+TRAINED_PPT_BASE_CONFIG = Path("./test/custom-ppt-config.py") 
 
 
 def build_model(cfg):
-    model = build_model(cfg.model)
+    model = build_from_cfg(cfg.model, registry=MODELS)
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Num params: {n_parameters}")
     model = create_ddp_model(
@@ -78,14 +81,18 @@ def build_model(cfg):
     return model
 
 
-def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, repo_root: Path = REPO_ROOT, device: str = "cuda") -> nn.Module:
+def load_base_model(
+    cfg_file: Path = TRAINED_PPT_BASE_CONFIG,
+    repo_root: Path = REPO_ROOT,
+    device: str = "cuda"
+) -> nn.Module:
     """load trained PPT model weights from config for application of LoRA / pdnorm expansion"""
     assert cfg_file.exists
     args = default_argument_parser().parse_args(args=["--config-file", f"{cfg_file}"])
     # this patching thing not stricty necessary, doesn't matter though because we throw everything away except
     # the model 
-    print(TRAINED_PPT_BASE_CONFIG)
-    raise Exception
+    # print(TRAINED_PPT_BASE_CONFIG)
+    # raise Exception
     cfg = Config.fromfile(args.config_file, args.options)
     if args.options is not None:
         cfg.merge_from_dict(args.options)
@@ -93,18 +100,23 @@ def load_base_model(cfg_file: Path = TRAINED_PPT_BASE_CONFIG, repo_root: Path = 
     if cfg.seed is None:
         cfg.seed = get_random_seed()
 
-    cfg.data.train.loop = cfg.epoch // cfg.eval_epoch
+    # cfg.data.train.loop = cfg.epoch // cfg.eval_epoch
 
     os.makedirs(os.path.join(cfg.save_path, "model"), exist_ok=True)
     if not cfg.resume:
         cfg.dump(os.path.join(cfg.save_path, "config.py"))
-    cfg = patch_cfg(cfg, repo_root=repo_root)
-    print(cfg)
-    raise Exception
+    # cfg = patch_cfg(cfg, repo_root=repo_root)
+    # print(cfg)
+    # raise Exception
     # cfg = default_config_parser(args.config_file, args.options); cfg = patch_cfg(cfg, repo_root=repo_root)
     # tester = TESTERS.build(dict(type=cfg.test.type, cfg=cfg))
     # model = tester.model
-    model = build_model(cfg)
+    try:
+        model = build_model(cfg)
+    except Exception as e:
+        logger.error(e)
+        logger.warning(cfg.keys())
+        raise RuntimeError
     model.to(device)
     return model
 
