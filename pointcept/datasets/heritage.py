@@ -83,6 +83,7 @@ class LibraryDataset(Dataset):
 
         self.data_list = self.get_data_list()
         if not self.data_list:
+            print(self.data_root)
             raise ValueError("Dataset empty: no files found!")
         self.la = torch.load(la_file) if la_file else None
         self.ignore_index = ignore_index

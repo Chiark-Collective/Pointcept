@@ -20,3 +20,6 @@ from .shapenet_part import ShapeNetPartDataset
 
 # dataloader
 from .dataloader import MultiDatasetDataloader
+
+# heritage
+from .heritage import LibraryDataset
