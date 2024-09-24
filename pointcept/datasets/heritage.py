@@ -130,7 +130,9 @@ class LibraryDataset(Dataset):
             segment=segment,
             instance=instance,
             scene_id=scene_id,
+            condition="Heritage"
         )
+        print(f"set data_dict with keys {data_dict.keys()}")
         if self.la:
             sampled_index = self.la[self.get_data_name(idx)]
             mask = np.ones_like(segment).astype(np.bool)
@@ -147,6 +149,7 @@ class LibraryDataset(Dataset):
         # load data
         data_dict = self.get_data(idx)
         data_dict = self.transform(data_dict)
+        print(f"prepare_train_data returning data dict after transform with keys {data_dict.keys()}")
         return data_dict
 
     def prepare_test_data(self, idx):

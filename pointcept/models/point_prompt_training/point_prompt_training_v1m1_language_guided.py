@@ -241,6 +241,7 @@ class PointPromptTraining(nn.Module):
 
     def forward(self, data_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """Forward pass of the model."""
+        print(f"{data_dict.keys()=}")
         condition = data_dict["condition"][0]
         assert condition in self.conditions
 
