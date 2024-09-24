@@ -277,6 +277,8 @@ class Trainer(TrainerBase):
     def build_scheduler(self):
         assert hasattr(self, "optimizer")
         assert hasattr(self, "train_loader")
+        print(f"{len(self.train_loader)=}")
+        print(f"{self.cfg.eval_epoch=}")
         self.cfg.scheduler.total_steps = len(self.train_loader) * self.cfg.eval_epoch
         return build_scheduler(self.cfg.scheduler, self.optimizer)
 

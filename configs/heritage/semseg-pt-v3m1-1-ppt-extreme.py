@@ -8,6 +8,7 @@ _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
 epoch = 100
+eval_epoch = 100
 batch_size = 16  # bs: total bs in all gpus
 num_worker = 6 # worker processes for data loading
 mix_prob = 0.8 # mix3D augmentation probability (https://arxiv.org/pdf/2110.02210)

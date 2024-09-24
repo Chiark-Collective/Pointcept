@@ -156,7 +156,7 @@ def patch_cfg(cfg: dict, repo_root: Path) -> dict:
 def configure_adamw_lora(
     model,
     weight_decay: float = 0.05,
-    learning_rate: float = 0.005,
+    lr: float = 0.005,
     betas: tuple[float, float] = (0.9, 0.999),
     device: str = "cuda"
 ) -> torch.optim.AdamW:
@@ -186,7 +186,7 @@ def configure_adamw_lora(
     extra_args = dict(fused=True) if use_fused else dict()
     return torch.optim.AdamW(
         optim_groups,
-        lr=learning_rate,
+        lr=lr,
         betas=betas,
         **extra_args
     )
