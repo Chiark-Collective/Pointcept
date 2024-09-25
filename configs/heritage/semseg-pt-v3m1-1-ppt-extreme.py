@@ -11,9 +11,9 @@ epoch = 100
 eval_epoch = 100
 # batch_size = 16  # bs: total bs in all gpus
 batch_size = 1
-num_worker = 6 # worker processes for data loading
+num_worker = 1 # worker processes for data loading
 mix_prob = 0.8 # mix3D augmentation probability (https://arxiv.org/pdf/2110.02210)
-empty_cache = False # clear GPU cache after each iteration
+empty_cache = True # clear GPU cache after each iteration
 enable_amp = True # automatic mixed precision (float16/32)
 find_unused_parameters = True # pytorch DDP param, find params not used in forward pass
 
@@ -77,7 +77,7 @@ data = dict(
     train=dict(
         type="LibraryDataset",
         split="train",
-        data_root="data/clouds/res0.02_pr0.019/library",  # Optional, will use default if not specified
+        data_root="data/clouds/res0.05_pr0.049/library",  # Optional, will use default if not specified
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
@@ -92,9 +92,9 @@ data = dict(
             # dict(type="ChromaticAutoContrast", p=0.2, blend_factor=None),
             # dict(type="ChromaticTranslation", p=0.95, ratio=0.05),
             # dict(type="ChromaticJitter", p=0.95, std=0.05),
-            dict(type="GridSample", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True),
-            # dict(type="SphereCrop", point_max=100000, mode="random"),
-            # dict(type="CenterShift", apply_z=False),
+            dict(type="GridSample", grid_size=0.05, hash_type="fnv", mode="train", return_grid_coord=True),
+            dict(type="SphereCrop", point_max=100000, mode="random"),
+            dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ShufflePoint"),
             dict(type="ToTensor"),
@@ -106,12 +106,12 @@ data = dict(
     val=dict(
         type="LibraryDataset",
         split="val",
-        data_root="data/clouds/res0.02_pr0.019/library",
+        data_root="data/clouds/res0.05_pr0.049/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
-            dict(type="GridSample", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True),
-            # dict(type="CenterShift", apply_z=False),
+            dict(type="GridSample", grid_size=0.05, hash_type="fnv", mode="train", return_grid_coord=True),
+            dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ToTensor"),
             dict(type="Collect", keys=("coord", "grid_coord", "segment", "condition"), feat_keys=("color", "normal"))
@@ -122,7 +122,7 @@ data = dict(
     test=dict(
         type="LibraryDataset",
         split="test",
-        data_root="data/clouds/res0.02_pr0.019/library",
+        data_root="data/clouds/res0.05_pr0.049/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
