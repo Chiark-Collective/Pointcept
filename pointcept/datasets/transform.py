@@ -1144,5 +1144,8 @@ class Compose(object):
 
     def __call__(self, data_dict):
         for t in self.transforms:
+            print(f"{t=}")
+            # print(f"in Compose loop before transform data_dict keys say: {data_dict.keys()}")
             data_dict = t(data_dict)
+            # print(f"in Compose loop after transform data_dict keys say: {data_dict.keys()}")
         return data_dict

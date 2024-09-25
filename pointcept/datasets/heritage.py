@@ -24,6 +24,23 @@ from .transform import Compose, TRANSFORMS
 
 
 warnings.warn("Please refactor heritage category definitions out into config")
+
+HERITAGE_CATEGORY_IDS = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+]
+
 HERITAGE_CATEGORIES = [
     "wall",
     "floor",
@@ -42,7 +59,7 @@ HERITAGE_CATEGORIES = [
 
 @DATASETS.register_module()
 class LibraryDataset(Dataset):
-    class2id = np.array(HERITAGE_CATEGORIES)
+    class2id = np.array(HERITAGE_CATEGORY_IDS)
 
     def __init__(
         self,
