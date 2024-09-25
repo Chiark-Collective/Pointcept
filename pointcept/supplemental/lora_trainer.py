@@ -24,12 +24,12 @@ class LoRATrainer(Trainer):
         try:
             super(LoRATrainer, self).train()
         except torch.cuda.OutOfMemoryError as e:
-            prof.__exit__(None, None, None) ## ??
+            prof.__exit__(None, None, None) 
             print(e)
             now = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            save_to = Path(self.cfg.save_path) / f"trace_{now}.json"
+            save_to = (Path(self.cfg.save_path) / f"trace_{now}.json").resolve()
             print(f"Exporting crash profile trace to: {save_to}")
-            prof.export_chrome_trace(str(save_to.resolve()))
+            prof.export_chrome_trace(str(save_to))
             raise 
         else:
             prof.__exit__(None, None, None)
