@@ -24,7 +24,7 @@ class LoRATrainer(Trainer):
         try:
             super(LoRATrainer, self).train()
         except torch.cuda.OutOfMemoryError as e:
-            prof.__exit__(None, None, None) ## ??
+            prof.__exit__(None, None, None) 
             print(e)
             now = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             save_to = (Path(self.cfg.save_path) / f"trace_{now}.json").resolve()
