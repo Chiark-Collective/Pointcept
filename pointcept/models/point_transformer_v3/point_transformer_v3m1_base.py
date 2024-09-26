@@ -318,6 +318,8 @@ class Block(PointModule):
     def forward(self, point: Point):
         shortcut = point.feat
         point = self.cpe(point)
+        print(f"Block forward: after cpe {point=}")
+        # add nan check
         point.feat = shortcut + point.feat
         shortcut = point.feat
         if self.pre_norm:
