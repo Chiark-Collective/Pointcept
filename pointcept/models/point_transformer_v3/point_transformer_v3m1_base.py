@@ -412,9 +412,9 @@ class SerializedPooling(PointModule):
         traceable=True,  # record parent and cluster
     ):
         super().__init__()
-        print("*"*1000)
-        print(f"{in_channels=}")
-        print(f"{out_channels=}")
+        # print("*"*1000)
+        # print(f"{in_channels=}")
+        # print(f"{out_channels=}")
         self.in_channels = in_channels
         self.out_channels = out_channels
 

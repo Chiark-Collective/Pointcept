@@ -917,7 +917,7 @@ def combine_pth_files(label, input_paths, output_path):
         'color': [],
         'normal': [],
         'gt': [],
-        'scene_ids': []
+        'scene_id': label,
     }
 
     # Process each .pth file incrementally
@@ -938,8 +938,6 @@ def combine_pth_files(label, input_paths, output_path):
         if 'gt' in data:
             combined_data['gt'].append(data['gt'])
         
-        combined_data['scene_ids'].extend([label] * len(data['coord']))
-
     # Concatenate the arrays (out-of-core behavior depends on NumPy's internal optimizations)
     combined_data['coord'] = np.concatenate(combined_data['coord'], axis=0)
     combined_data['color'] = np.concatenate(combined_data['color'], axis=0)
