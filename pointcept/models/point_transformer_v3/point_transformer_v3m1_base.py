@@ -435,6 +435,7 @@ class SerializedPooling(PointModule):
         if self.traceable:
             point_dict["pooling_inverse"] = cluster
             point_dict["pooling_parent"] = point
+        assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         point = Point(point_dict)
         if self.norm is not None:
             point = self.norm(point)
@@ -477,7 +478,7 @@ class SerializedUnpooling(PointModule):
         if not self.printed:
             print(f"{parent=} {inverse=}")
             self.printed = True
-        assert not torch.isnan(parent["feat"]).any(), "Tensor contains NaN values"
+        assert not torch.isnan(parent["feat"]).any(), "Decoder: pooling parent tensor contains NaN values"
         point = self.proj(point)
         parent = self.proj_skip(parent)
         parent.feat = parent.feat + point.feat[inverse]
