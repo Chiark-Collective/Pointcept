@@ -1100,24 +1100,24 @@ class PointTransformerV3(PointModule):
         import joblib
 
         point = Point(data_dict)
-        joblib.dump(point, 'original_point.pkl')
+        joblib.dump(point, 'original_point_0.pkl')
         point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
         print(f" serialised input {point=}")
         point.sparsify()
-        joblib.dump(point, 'point_after_serialisation_and_sparsification.pkl')
+        joblib.dump(point, 'point_after_serialisation_and_sparsification_1.pkl')
 
         point = self.embedding(point)
-        joblib.dump(point, 'point_before_encoding.pkl')
+        joblib.dump(point, 'point_after_embedding_2.pkl')
 
         point = self.enc(point)
 
         # Save the entire model state before the decoder
-        joblib.dump(point, 'point_before_decoding.pkl')
-        torch.save(self.state_dict(), 'model_state_before_decoder.pth')
+        joblib.dump(point, 'point_after_encoder_3.pkl')
+        torch.save(self.state_dict(), 'model_state_after_encoder.pth')
 
         if not self.cls_mode:
             point = self.dec(point)
-            joblib.dump(point, 'point_after_decoding.pkl')
+            joblib.dump(point, 'point_after_decoder_4.pkl')
 
         return point
 
