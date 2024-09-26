@@ -319,7 +319,17 @@ class Block(PointModule):
         shortcut = point.feat
         point = self.cpe(point)
         print(f"Block forward: after cpe {point=}")
+        try:
+            assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        except AssertionError as a:
+            # print(f"{point_dict['pooling_parent']=}")
+            print(f"ASSERTION FAILED in Block forward index: {self.cpe[0].indice_key}")
+            # analyze_nans(point_dict["pooling_parent"]["feat"])
+            raise
+        else:
+            print(f"ALL GOOD in Block forward index: {self.cpe[0].indice_key}: original point {point}")
         # add nan check
+
         point.feat = shortcut + point.feat
         shortcut = point.feat
         if self.pre_norm:
