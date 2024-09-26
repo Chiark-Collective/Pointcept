@@ -255,26 +255,37 @@ def forward(self, input):
         print(f"PointSequential forward {k}: {module=}")
         # Point module
         if isinstance(module, PointModule):
+            # print("point module")
             input = module(input)
         # Spconv module
         elif spconv.modules.is_spconv_module(module):
+            # print("spconv module")
             if isinstance(input, Point):
+                # print("  is Point")
                 input.sparse_conv_feat = module(input.sparse_conv_feat)
+                print(f"{input.sparse_conv_feat=}")
                 input.feat = input.sparse_conv_feat.features
+                print(f"{input.feat.shape=}")
+                analyze_nans(input.feat)
             else:
+                # print("  is NOT Point")
                 input = module(input)
         # PyTorch module
         else:
+            # print("pytorch module")
             if isinstance(input, Point):
+                # print("  is Point")
                 input.feat = module(input.feat)
                 if "sparse_conv_feat" in input.keys():
                     input.sparse_conv_feat = input.sparse_conv_feat.replace_feature(
                         input.feat
                     )
             elif isinstance(input, spconv.SparseConvTensor):
+                # print("  is spconv.SparseConvTensor")
                 if input.indices.shape[0] != 0:
                     input = input.replace_feature(module(input.features))
             else:
+                # print("  is neither")
                 input = module(input)
         try:
             assert not torch.isnan(input["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
@@ -372,6 +383,10 @@ class Block(PointModule):
         except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
             print(f"ASSERTION FAILED in Block forward index after CPE: {self.cpe[0].indice_key}")
+            # print("disable lora")
+            # from minlora.utils import disable_lora
+            # self.cpe = disable_lora(self.cpe)
+            # print(f"after disable lora {self.cpe=}")
             PointSequential.forward = forward
             self.cpe(point)
             # print(f": original point {point}")
@@ -412,6 +427,8 @@ def analyze_nans(tensor):
     not_nan_counts_per_column = tensor.shape[0] - nan_counts_per_column
     
     # Count fully NaN rows and columns
+    any_nan_rows = (nan_counts_per_row > 0).sum()
+    any_nan_columns = (nan_counts_per_column > 0).sum()
     fully_nan_rows = (nan_counts_per_row == tensor.shape[1]).sum()
     fully_nan_columns = (nan_counts_per_column == tensor.shape[0]).sum()
     
@@ -425,6 +442,8 @@ def analyze_nans(tensor):
     print(f"Total NaNs: {total_nans}")
     print(f"Total non-NaNs: {total_not_nans}")
     print(f"Percentage of NaNs: {nan_percentage:.2f}%")
+    print(f"Any NaN rows: {any_nan_rows}")
+    print(f"Any NaN columns: {any_nan_columns}")
     print(f"Fully NaN rows: {fully_nan_rows}")
     print(f"Fully NaN columns: {fully_nan_columns}")
     print("\nNaN distribution per row:")
