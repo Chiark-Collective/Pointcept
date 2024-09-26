@@ -16,6 +16,7 @@ class LoRATrainer(Trainer):
         return configure_adamw_lora(self.model, **self.cfg.optimizer)
 
     def train(self):
+        print("\nENTER TRAIN\n" * 100)
         prof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             profile_memory=True, record_shapes=True
@@ -23,7 +24,7 @@ class LoRATrainer(Trainer):
         prof.__enter__()
         try:
             super(LoRATrainer, self).train()
-        except torch.cuda.OutOfMemoryError as e:
+        except Exception as e:
             prof.__exit__(None, None, None) 
             print(e)
             now = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

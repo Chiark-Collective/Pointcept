@@ -271,10 +271,12 @@ class PointPromptTraining(nn.Module):
         # print(f"{feat.shape=}")
 
         # print(f"{self.class_embedding.shape=}")
+        print(f"{feat=} {self.class_embedding=}")
         sim = feat @ self.class_embedding[:].t()
         # print(f"{sim.shape=}")
 
         logit_scale = self.logit_scale.exp()
+        # print(f"{logit_scale=} {sim=}")
         seg_logits = logit_scale * sim
         # print(f"Segment key says: {data_dict['segment']}")
         data_dict['segment'] = data_dict['segment'] - 1
@@ -286,8 +288,10 @@ class PointPromptTraining(nn.Module):
         print(f"{seg_logits.shape=}")
         print(f"{data_dict['segment'].shape=}")
         if self.training:
+            # print(f"{seg_logits=} {data_dict['segment']=}")
             loss = self.criteria(seg_logits, data_dict["segment"])
-            print(f"{loss=}")
+            # print(f"{loss=}")
+            raise ValueError
             return dict(loss=loss)
         elif "segment" in data_dict.keys():
             loss = self.criteria(seg_logits, data_dict["segment"])
