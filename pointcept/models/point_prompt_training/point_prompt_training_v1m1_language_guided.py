@@ -152,7 +152,7 @@ class PointPromptTraining(nn.Module):
         self.backbone = MODELS.build(
             {**backbone, "norm_layer_factory": norm_layer_factory}
         )
-
+        print(f"{type(self.backbone)=}")
         self.criteria = build_criteria(criteria)
         self.clip_model_string = clip_model
         self.backbone_out_channels = backbone_out_channels
@@ -256,7 +256,10 @@ class PointPromptTraining(nn.Module):
         # raise ValueError
 
         # Get features from backbone
+        # print(data_dict)
         point = self.backbone(data_dict)
+        # print(f"{self.backbone=}")
+        print(f"{point.feat=}")
         feat = point.feat if isinstance(point, Point) else point
 
         if self.backbone_mode:
@@ -280,8 +283,11 @@ class PointPromptTraining(nn.Module):
 
 
         # Compute loss or return logits based on mode
+        print(f"{seg_logits.shape=}")
+        print(f"{data_dict['segment'].shape=}")
         if self.training:
             loss = self.criteria(seg_logits, data_dict["segment"])
+            print(f"{loss=}")
             return dict(loss=loss)
         elif "segment" in data_dict.keys():
             loss = self.criteria(seg_logits, data_dict["segment"])

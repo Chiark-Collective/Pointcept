@@ -437,7 +437,7 @@ class DataHandler:
             if output_format == '.pth' or save_all_formats:
                 pth_in_files = list(output_dir.glob('*.pth'))
                 combined_pth_name = output_dir / "combined.pth"
-                combine_pth_files(input_paths=pth_in_files, output_path=combined_pth_name)
+                combine_pth_files(label=f"{self.label}_{fold}", input_paths=pth_in_files, output_path=combined_pth_name)
 
 
 #################################################################################
@@ -901,7 +901,7 @@ class MeshSampler:
         logger.info(f"Saved point cloud to {output_path} in .pth format.")
 
 
-def combine_pth_files(input_paths, output_path):
+def combine_pth_files(label, input_paths, output_path):
     """
     Combines multiple .pth files into one .pth file while handling the process incrementally.
 
@@ -938,7 +938,7 @@ def combine_pth_files(input_paths, output_path):
         if 'gt' in data:
             combined_data['gt'].append(data['gt'])
         
-        combined_data['scene_ids'].append(data['scene_id'])
+        combined_data['scene_ids'].extend([label] * len(data['coord']))
 
     # Concatenate the arrays (out-of-core behavior depends on NumPy's internal optimizations)
     combined_data['coord'] = np.concatenate(combined_data['coord'], axis=0)
