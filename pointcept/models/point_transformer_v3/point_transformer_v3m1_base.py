@@ -415,6 +415,13 @@ class SerializedPooling(PointModule):
             self.act = PointSequential(act_layer())
 
     def forward(self, point: Point):
+        try:
+            assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        except AssertionError as a:
+            # print(f"{point_dict['pooling_parent']=}")
+            print(f"SerializedPooling forward: original point {point}")
+            # analyze_nans(point_dict["pooling_parent"]["feat"])
+            raise
         pooling_depth = (math.ceil(self.stride) - 1).bit_length()
         if pooling_depth > point.serialized_depth:
             pooling_depth = 0
@@ -486,7 +493,7 @@ class SerializedPooling(PointModule):
         except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
             print(f"{point_proj=}")
-            analyze_nans(point_dict["pooling_parent"]["feat"])
+            # analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
         point = Point(point_dict)
         if self.norm is not None:
