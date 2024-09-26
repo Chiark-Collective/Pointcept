@@ -248,6 +248,44 @@ class MLP(nn.Module):
         return x
 
 
+# **DIAGNOSTIC MONKEY PATCH FOR POINTSEQUENTIAL FORWARD
+
+def forward(self, input):
+    for k, module in self._modules.items():
+        print(f"PointSequential forward {k}: {module=}")
+        # Point module
+        if isinstance(module, PointModule):
+            input = module(input)
+        # Spconv module
+        elif spconv.modules.is_spconv_module(module):
+            if isinstance(input, Point):
+                input.sparse_conv_feat = module(input.sparse_conv_feat)
+                input.feat = input.sparse_conv_feat.features
+            else:
+                input = module(input)
+        # PyTorch module
+        else:
+            if isinstance(input, Point):
+                input.feat = module(input.feat)
+                if "sparse_conv_feat" in input.keys():
+                    input.sparse_conv_feat = input.sparse_conv_feat.replace_feature(
+                        input.feat
+                    )
+            elif isinstance(input, spconv.SparseConvTensor):
+                if input.indices.shape[0] != 0:
+                    input = input.replace_feature(module(input.features))
+            else:
+                input = module(input)
+        try:
+            assert not torch.isnan(input["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        except AssertionError as a:
+            print(f"ASSERTION FAILED after PointSequential {module=}")
+            raise
+        else:
+            print(f"ALL GOOD after PointSequential {module=}")
+        print(f"PointSequential input: {input}")
+    return input
+
 class Block(PointModule):
     def __init__(
         self,
@@ -316,24 +354,31 @@ class Block(PointModule):
         )
 
     def forward(self, point: Point):
-        shortcut = point.feat
-        point = self.cpe(point)
-        # print(f"Block forward: after cpe {point=}")
         print(f"Block forward: {point.keys()=}")
         try:
             assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         except AssertionError as a:
+            print(f"ASSERTION FAILED in Block forward BEGINNING: {self.cpe[0].indice_key}")
+            raise
+        else:
+            print(f"ALL GOOD in Block forward BEGINNING: {self.cpe[0].indice_key}")
+        shortcut = point.feat
+        point = self.cpe(point)
+        # print(point["feat"].shape)
+        # print(self.cpe[0].in_channels)
+        # print(f"Block forward: after cpe {point=}")
+        try:
+            assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
-            print(f"ASSERTION FAILED in Block forward index after CPE: {self.cpe[0].indice_key}: original point {point}")
-            print(f"{point['serialized_code']=}")
-            print(f"{point['serialized_order']=}")
+            print(f"ASSERTION FAILED in Block forward index after CPE: {self.cpe[0].indice_key}")
+            PointSequential.forward = forward
+            self.cpe(point)
+            # print(f": original point {point}")
             # analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
         else:
             print(f"ALL GOOD in Block forward index after CPE: {self.cpe[0].indice_key}")
-            print(f"{point['serialized_code']=}")
-            print(f"{point['serialized_order']=}")
-            # joblib.dump("")
         # add nan check
 
         point.feat = shortcut + point.feat
