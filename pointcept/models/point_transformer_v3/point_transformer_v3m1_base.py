@@ -467,12 +467,17 @@ class SerializedUnpooling(PointModule):
             self.proj_skip.add(act_layer())
 
         self.traceable = traceable
+        self.printed = False
 
     def forward(self, point):
         assert "pooling_parent" in point.keys()
         assert "pooling_inverse" in point.keys()
         parent = point.pop("pooling_parent")
         inverse = point.pop("pooling_inverse")
+        if not self.printed:
+            print(f"{parent=} {inverse=}")
+            self.printed = True
+        assert not torch.isnan(parent["feat"]).any(), "Tensor contains NaN values"
         point = self.proj(point)
         parent = self.proj_skip(parent)
         parent.feat = parent.feat + point.feat[inverse]
