@@ -338,6 +338,49 @@ class Block(PointModule):
         return point
 
 
+
+def analyze_nans(tensor):
+    # Count NaNs along each dimension
+    nan_counts_per_row = torch.isnan(tensor).sum(dim=1)
+    nan_counts_per_column = torch.isnan(tensor).sum(dim=0)
+    
+    # Count non-NaNs
+    not_nan_counts_per_row = tensor.shape[1] - nan_counts_per_row
+    not_nan_counts_per_column = tensor.shape[0] - nan_counts_per_column
+    
+    # Count fully NaN rows and columns
+    fully_nan_rows = (nan_counts_per_row == tensor.shape[1]).sum()
+    fully_nan_columns = (nan_counts_per_column == tensor.shape[0]).sum()
+    
+    # Total NaNs and non-NaNs
+    total_nans = torch.isnan(tensor).sum()
+    total_not_nans = tensor.numel() - total_nans
+    
+    # Percentage of NaNs
+    nan_percentage = (total_nans / tensor.numel()) * 100
+    
+    print(f"Total NaNs: {total_nans}")
+    print(f"Total non-NaNs: {total_not_nans}")
+    print(f"Percentage of NaNs: {nan_percentage:.2f}%")
+    print(f"Fully NaN rows: {fully_nan_rows}")
+    print(f"Fully NaN columns: {fully_nan_columns}")
+    print("\nNaN distribution per row:")
+    print(nan_counts_per_row)
+    print("\nNaN distribution per column:")
+    print(nan_counts_per_column)
+    
+    return {
+        "nan_counts_per_row": nan_counts_per_row,
+        "nan_counts_per_column": nan_counts_per_column,
+        "not_nan_counts_per_row": not_nan_counts_per_row,
+        "not_nan_counts_per_column": not_nan_counts_per_column,
+        "fully_nan_rows": fully_nan_rows,
+        "fully_nan_columns": fully_nan_columns,
+        "total_nans": total_nans,
+        "total_not_nans": total_not_nans,
+        "nan_percentage": nan_percentage
+    }
+
 class SerializedPooling(PointModule):
     def __init__(
         self,
@@ -435,7 +478,12 @@ class SerializedPooling(PointModule):
         if self.traceable:
             point_dict["pooling_inverse"] = cluster
             point_dict["pooling_parent"] = point
-        assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        try:
+            assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        except AssertionError as a:
+            # print(f"{point_dict['pooling_parent']=}")
+            analyze_nans(point_dict["pooling_parent"]["feat"])
+            raise
         point = Point(point_dict)
         if self.norm is not None:
             point = self.norm(point)
@@ -1034,10 +1082,14 @@ class PointTransformerV3(PointModule):
 
     def forward(self, data_dict):
         point = Point(data_dict)
+        print(f" initial input {point=}")
         point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
+        print(f" serialised input {point=}")
         point.sparsify()
+        print(f" after sparsify {point=}")
 
         point = self.embedding(point)
+        print(f" after embedding {point=}")
         point = self.enc(point)
         if not self.cls_mode:
             point = self.dec(point)
