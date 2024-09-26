@@ -456,7 +456,7 @@ class SerializedPooling(PointModule):
             code = code[perm]
             order = order[perm]
             inverse = inverse[perm]
-
+        point_proj = self.proj(point.feat) # NaN!
         # collect information
         point_dict = Dict(
             feat=torch_scatter.segment_csr(
@@ -485,6 +485,7 @@ class SerializedPooling(PointModule):
             assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
+            print(f"{point_proj=}")
             analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
         point = Point(point_dict)
