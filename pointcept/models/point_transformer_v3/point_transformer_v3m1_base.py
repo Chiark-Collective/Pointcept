@@ -1100,11 +1100,11 @@ class PointTransformerV3(PointModule):
         import joblib
 
         point = Point(data_dict)
-        joblib.dump(point, 'point_before_serialization.pkl')
+        joblib.dump(point, 'original_point.pkl')
         point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
         print(f" serialised input {point=}")
         point.sparsify()
-        joblib.dump(point, 'point_before_embedding.pkl')
+        joblib.dump(point, 'point_after_serialisation_and_sparsification.pkl')
 
         point = self.embedding(point)
         joblib.dump(point, 'point_before_encoding.pkl')

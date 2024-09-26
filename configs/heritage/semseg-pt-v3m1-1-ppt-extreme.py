@@ -17,6 +17,13 @@ empty_cache = True # clear GPU cache after each iteration
 enable_amp = True # automatic mixed precision (float16/32)
 find_unused_parameters = True # pytorch DDP param, find params not used in forward pass
 
+# copied from base config
+resume = False
+evaluate = True
+test_only = False
+seed = 44350923
+sync_bn = False
+
 HERITAGE_CATEGORIES = [
     "wall",
     "floor",
