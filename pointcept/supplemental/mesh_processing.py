@@ -876,8 +876,8 @@ class MeshSampler:
         # Prepare the coordinate array (float32)
         coord = points.astype(np.float32)
 
-        # Prepare the color array (float32) - assuming RGB is normalized [0, 1]
-        color = (colors * 255).astype(np.float32) / 256.0  # Normalize to the same range as the example
+        # Prepare the color array (float32)
+        color = colors.astype(np.float32)
 
         # Dictionary to store the data
         data = {

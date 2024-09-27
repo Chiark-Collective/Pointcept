@@ -84,7 +84,7 @@ data = dict(
     train=dict(
         type="LibraryDataset",
         split="train",
-        data_root="data/clouds/res0.05_pr0.049/library",  # Optional, will use default if not specified
+        data_root="data/clouds/res0.02_pr0.0195/library",  # Optional, will use default if not specified
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
@@ -99,8 +99,8 @@ data = dict(
             # dict(type="ChromaticAutoContrast", p=0.2, blend_factor=None),
             # dict(type="ChromaticTranslation", p=0.95, ratio=0.05),
             # dict(type="ChromaticJitter", p=0.95, std=0.05),
-            dict(type="GridSample", grid_size=0.05, hash_type="fnv", mode="train", return_grid_coord=True),
-            dict(type="SphereCrop", point_max=100000, mode="random"),
+            dict(type="GridSample", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True),
+            dict(type="SphereCrop", point_max=102400, mode="random"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ShufflePoint"),
@@ -113,11 +113,11 @@ data = dict(
     val=dict(
         type="LibraryDataset",
         split="val",
-        data_root="data/clouds/res0.05_pr0.049/library",
+        data_root="data/clouds/res0.02_pr0.0195/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
-            dict(type="GridSample", grid_size=0.05, hash_type="fnv", mode="train", return_grid_coord=True),
+            dict(type="GridSample", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ToTensor"),
@@ -129,7 +129,7 @@ data = dict(
     test=dict(
         type="LibraryDataset",
         split="test",
-        data_root="data/clouds/res0.05_pr0.049/library",
+        data_root="data/clouds/res0.02_pr0.0195/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
