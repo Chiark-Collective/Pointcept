@@ -247,7 +247,7 @@ def create_pc_dataset(pc_dict: dict[str, ty.Any]) -> xr.Dataset:
     """
     # Check if all required keys are present in the input dictionary
     required_keys = [
-        'coord', 'color', 'normal', 'semantic_gt20', 'scene_id'
+        'coord', 'color', 'normal', 'gt', 'scene_id'
     ]
     for key in required_keys:
         if key not in pc_dict:
@@ -258,7 +258,7 @@ def create_pc_dataset(pc_dict: dict[str, ty.Any]) -> xr.Dataset:
     for key in ['color', 'normal']:
         if pc_dict[key].shape != (num_points, 3):
             raise ValueError(f"Array '{key}' has an inconsistent shape. Expected ({num_points}, 3).")
-    for key in ['semantic_gt20']: #, 'semantic_gt200', 'instance_gt']:
+    for key in ['gt']: #, 'semantic_gt200', 'instance_gt']:
         if pc_dict[key].shape != (num_points,):
             raise ValueError(f"Array '{key}' has an inconsistent shape. Expected ({num_points},).")
 
@@ -268,7 +268,7 @@ def create_pc_dataset(pc_dict: dict[str, ty.Any]) -> xr.Dataset:
             coord=(['point', 'coord_dim'], pc_dict['coord']),
             color=(['point', 'color_dim'], pc_dict['color']),
             normal=(['point', 'normal_dim'], pc_dict['normal']),
-            semantic_gt20=(['point'], pc_dict['semantic_gt20']),
+            gt=(['point'], pc_dict['gt']),
             # semantic_gt200=(['point'], pc_dict['semantic_gt200']),
             # instance_gt=(['point'], pc_dict['instance_gt'])
         ),
@@ -416,34 +416,51 @@ def create_las_with_results(scenes_dir, results_dir, output_dir=None):
     os.makedirs(output_dir, exist_ok=True)
 
     predictions = {
-        path.stem.rstrip("_pred"): np.load(path) 
+        "library_val": np.load(path) 
         for path in results_dir.glob("*.npy")
     }
     scenes = {
-        path.stem: torch.load(path) 
+        "library_val": torch.load(path) 
         for path in scenes_dir.glob("*.pth")
     }
 
+    # classes = [
+    # 'wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table', 'door',
+    # 'window', 'bookshelf', 'picture', 'counter', 'desk', 'curtain',
+    # 'refridgerator', 'shower curtain', 'toilet', 'sink', 'bathtub',
+    # 'otherfurniture'
+    # ]
+
     classes = [
-    'wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table', 'door',
-    'window', 'bookshelf', 'picture', 'counter', 'desk', 'curtain',
-    'refridgerator', 'shower curtain', 'toilet', 'sink', 'bathtub',
-    'otherfurniture'
+    "wall",
+    "floor",
+    "roof",
+    "ceiling",
+    "footpath",
+    "grass",
+    "column",
+    "door",
+    "window",
+    "stair",
+    "railing",
+    "rainwater pipe",
+    "other",
     ]
 
     for scene_id, pred in predictions.items():
         points = scenes[scene_id]
-        labels = points["semantic_gt20"]
+        labels = points["gt"]
         ds = create_pc_dataset(points)
-        ds = ds.assign_coords(classes_scannet=xr.DataArray(np.array(classes), dims=["classes_scannet"]))
+        ds = ds.assign_coords(classes=xr.DataArray(np.array(classes), dims=["classes"]))
         ds["pred"] =(("point",), pred)
         ds["color"] = ds["color"].astype(np.uint8)
+        ds["gt"] = ds["gt"] + 1
         df = pd.concat(
             [
                 ds["coord"].to_pandas(),
                 ds["color"].to_pandas(),
                 ds["pred"].to_pandas().rename("pred"),
-                ds["semantic_gt20"].to_pandas().rename("gt")
+                ds["gt"].to_pandas().rename("gt")
             ],
             axis=1
         )

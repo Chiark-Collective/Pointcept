@@ -928,6 +928,7 @@ class SphereCrop(object):
         self.mode = mode
 
     def __call__(self, data_dict):
+        # print("Call to sphere crop...")
         point_max = (
             int(self.sample_rate * data_dict["coord"].shape[0])
             if self.sample_rate is not None
@@ -991,6 +992,7 @@ class SphereCrop(object):
                 center = data_dict["coord"][
                     np.random.randint(data_dict["coord"].shape[0])
                 ]
+                # print(f"{center=}")
             elif self.mode == "center":
                 center = data_dict["coord"][data_dict["coord"].shape[0] // 2]
             else:
@@ -1144,7 +1146,7 @@ class Compose(object):
 
     def __call__(self, data_dict):
         for t in self.transforms:
-            print(f"{t=}")
+            # print(f"{t=}")
             # print(f"in Compose loop before transform data_dict keys say: {data_dict.keys()}")
             data_dict = t(data_dict)
             # print(f"in Compose loop after transform data_dict keys say: {data_dict.keys()}")

@@ -71,7 +71,7 @@ class WeightFreezer:
             state = "unfrozen" if param.requires_grad else "frozen"
             if state == "unfrozen" and not print_unfrozen:
                 continue
-            print(f"{name}: {state}")
+            # print(f"{name}: {state}")
 
 
 def count_trainable_parameters(model):

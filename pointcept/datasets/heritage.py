@@ -99,6 +99,7 @@ class LibraryDataset(Dataset):
             self.aug_transform = [Compose(aug) for aug in self.test_cfg.aug_transform]
 
         self.data_list = self.get_data_list()
+        print(f"{self.data_list=}")
         if not self.data_list:
             print(self.data_root)
             raise ValueError("Dataset empty: no files found!")
@@ -149,7 +150,7 @@ class LibraryDataset(Dataset):
             scene_id=scene_id,
             condition="Heritage"
         )
-        print(f"set data_dict with keys {data_dict.keys()}")
+        # print(f"set data_dict with keys {data_dict.keys()}")
         if self.la:
             sampled_index = self.la[self.get_data_name(idx)]
             mask = np.ones_like(segment).astype(np.bool)
@@ -166,36 +167,44 @@ class LibraryDataset(Dataset):
         # load data
         data_dict = self.get_data(idx)
         data_dict = self.transform(data_dict)
-        print(f"prepare_train_data returning data dict after transform with keys {data_dict.keys()}")
+        # print(f"prepare_train_data returning data dict after transform with keys {data_dict.keys()}")
         return data_dict
 
     def prepare_test_data(self, idx):
         # load data
         data_dict = self.get_data(idx)
+        print("in prepare_test_data")
+        print(f"{data_dict=}")
         segment = data_dict.pop("segment")
         data_dict = self.transform(data_dict)
         data_dict_list = []
         for aug in self.aug_transform:
             data_dict_list.append(aug(deepcopy(data_dict)))
-
+        print('a')
         input_dict_list = []
         for data in data_dict_list:
+            print(data)
             data_part_list = self.test_voxelize(data)
+            print("done voxelisation")
             for data_part in data_part_list:
                 if self.test_crop:
                     data_part = self.test_crop(data_part)
                 else:
                     data_part = [data_part]
                 input_dict_list += data_part
-
+        print('b')
         for i in range(len(input_dict_list)):
             input_dict_list[i] = self.post_transform(input_dict_list[i])
+        print('c')
         data_dict = dict(
             fragment_list=input_dict_list, segment=segment, name=self.get_data_name(idx)
         )
+
         return data_dict
 
     def __getitem__(self, idx):
+        print("in getitem")
+        print(f"{idx=}")
         if self.test_mode:
             return self.prepare_test_data(idx)
         else:

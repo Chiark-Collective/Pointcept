@@ -79,7 +79,8 @@ class TesterBase:
             # for k in weight:
             #     print(k)
             # print("DITCHING CLASS EMBEDDING")
-            weight.pop("class_embedding")
+            if 'class_embedding' in weight:
+                weight.pop("class_embedding")
             model.load_state_dict(weight, strict=False)
             self.logger.info(
                 "=> Loaded weight '{}' (epoch {})".format(
@@ -92,6 +93,7 @@ class TesterBase:
 
     def build_test_loader(self):
         test_dataset = build_dataset(self.cfg.data.test)
+        print(f"{test_dataset=}")
         if comm.get_world_size() > 1:
             test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
         else:
@@ -130,6 +132,8 @@ class SemSegTester(TesterBase):
         # raise Exception
         save_path = os.path.join(self.cfg.save_path, "result")
         make_dirs(save_path)
+        print(f"{self.cfg.data.test.type=}")
+        # self.cfg.data.test.type = "ScanNetDataset"
         # create submit folder only on main process
         if (
             self.cfg.data.test.type == "ScanNetDataset"
@@ -161,7 +165,10 @@ class SemSegTester(TesterBase):
         comm.synchronize()
         record = {}
         # fragment inference
+        print(f"{self.test_loader=}")
         for idx, data_dict in enumerate(self.test_loader):
+            print(idx)
+            print(data_dict)
             end = time.time()
             data_dict = data_dict[0]  # current assume batch size is 1
             fragment_list = data_dict.pop("fragment_list")
@@ -188,8 +195,9 @@ class SemSegTester(TesterBase):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
                     with torch.no_grad():
+                        print(f"{self.model=}")
                         pred_part = self.model(input_dict)["seg_logits"]
-                        print(f'{self.model(input_dict)["seg_logits"].shape}=')  # (n, k)
+                        # print(f'{self.model(input_dict)["seg_logits"].shape}=')  # (n, k)
                         # raise ValueError
                         pred_part = F.softmax(pred_part, -1)
                         if self.cfg.empty_cache:
@@ -316,10 +324,12 @@ class SemSegTester(TesterBase):
 
             iou_class = intersection / (union + 1e-10)
             accuracy_class = intersection / (target + 1e-10)
+            print(iou_class)
+            print(accuracy_class)
             mIoU = np.mean(iou_class)
             mAcc = np.mean(accuracy_class)
-            print("Type of intersection:", type(intersection))
-            print("Value of intersection:", intersection)
+            # print("Type of intersection:", type(intersection))
+            # print("Value of intersection:", intersection)
             allAcc = sum(intersection) / (sum(target) + 1e-10)
 
             logger.info(

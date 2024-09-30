@@ -16,7 +16,7 @@ class LoRATrainer(Trainer):
         return configure_adamw_lora(self.model, **self.cfg.optimizer)
 
     def train(self):
-        print("\nENTER TRAIN\n" * 100)
+        # print("\nENTER TRAIN\n" * 100)
         prof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             profile_memory=True, record_shapes=True

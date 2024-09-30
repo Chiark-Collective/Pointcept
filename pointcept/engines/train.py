@@ -221,13 +221,13 @@ class Trainer(TrainerBase):
 
     def build_train_loader(self):
         train_data = build_dataset(self.cfg.data.train)
-        print(f"{train_data=}")
+        # print(f"{train_data=}")
 
         if comm.get_world_size() > 1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
         else:
             train_sampler = None
-        print(f"{self.cfg.num_worker_per_gpu=}")
+        # print(f"{self.cfg.num_worker_per_gpu=}")
         init_fn = (
             partial(
                 worker_init_fn,
@@ -251,9 +251,9 @@ class Trainer(TrainerBase):
             drop_last=True,
             persistent_workers=True,
         )
-        print(f"{train_loader=}")
-        import joblib
-        joblib.dump(train_loader, "train_loader.joblib")
+        # print(f"{train_loader=}")
+        # import joblib
+        # joblib.dump(train_loader, "train_loader.joblib")
         return train_loader
 
     def build_val_loader(self):
@@ -281,8 +281,8 @@ class Trainer(TrainerBase):
     def build_scheduler(self):
         assert hasattr(self, "optimizer")
         assert hasattr(self, "train_loader")
-        print(f"{len(self.train_loader)=}")
-        print(f"{self.cfg.eval_epoch=}")
+        # print(f"{len(self.train_loader)=}")
+        # print(f"{self.cfg.eval_epoch=}")
         self.cfg.scheduler.total_steps = len(self.train_loader) * self.cfg.eval_epoch
         return build_scheduler(self.cfg.scheduler, self.optimizer)
 

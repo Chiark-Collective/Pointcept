@@ -152,7 +152,7 @@ class PointPromptTraining(nn.Module):
         self.backbone = MODELS.build(
             {**backbone, "norm_layer_factory": norm_layer_factory}
         )
-        print(f"{type(self.backbone)=}")
+        # print(f"{type(self.backbone)=}")
         self.criteria = build_criteria(criteria)
         self.clip_model_string = clip_model
         self.backbone_out_channels = backbone_out_channels
@@ -241,7 +241,7 @@ class PointPromptTraining(nn.Module):
 
     def forward(self, data_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """Forward pass of the model."""
-        print(f"{data_dict.keys()=}")
+        # print(f"{data_dict.keys()=}")
         condition = data_dict["condition"][0]
         assert condition in self.conditions
 
@@ -259,7 +259,7 @@ class PointPromptTraining(nn.Module):
         # print(data_dict)
         point = self.backbone(data_dict)
         # print(f"{self.backbone=}")
-        print(f"{point.feat=}")
+        # print(f"{point.feat=}")
         feat = point.feat if isinstance(point, Point) else point
 
         if self.backbone_mode:
@@ -268,9 +268,9 @@ class PointPromptTraining(nn.Module):
         # Project features and compute similarities
         feat = self.proj_head(feat)
         feat = feat / feat.norm(dim=-1, keepdim=True)
-        # print(f"{feat.shape=}")
+        print(f"{feat.shape=}")
 
-        # print(f"{self.class_embedding.shape=}")
+        print(f"{self.class_embedding.shape=}")
         print(f"{feat=} {self.class_embedding=}")
         sim = feat @ self.class_embedding[:].t()
         # print(f"{sim.shape=}")
@@ -279,19 +279,20 @@ class PointPromptTraining(nn.Module):
         # print(f"{logit_scale=} {sim=}")
         seg_logits = logit_scale * sim
         # print(f"Segment key says: {data_dict['segment']}")
-        data_dict['segment'] = data_dict['segment'] - 1
-        print("Label max:", data_dict['segment'].max())
-        print("Label min:", data_dict['segment'].min())
+        if 'segment' in data_dict:
+            data_dict['segment'] = data_dict['segment'] - 1
+        # print("Label max:", data_dict['segment'].max())
+        # print("Label min:", data_dict['segment'].min())
 
 
         # Compute loss or return logits based on mode
-        print(f"{seg_logits.shape=}")
-        print(f"{data_dict['segment'].shape=}")
+        # print(f"{seg_logits.shape=}")
+        # print(f"{data_dict['segment'].shape=}")
         if self.training:
             # print(f"{seg_logits=} {data_dict['segment']=}")
             loss = self.criteria(seg_logits, data_dict["segment"])
             # print(f"{loss=}")
-            raise ValueError
+            # raise ValueError
             return dict(loss=loss)
         elif "segment" in data_dict.keys():
             loss = self.criteria(seg_logits, data_dict["segment"])

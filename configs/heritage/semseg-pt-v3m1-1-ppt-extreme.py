@@ -7,14 +7,14 @@ PTv3 + PPT
 _base_ = ["../_base_/default_runtime.py"]
 
 # misc custom setting
-epoch = 100
-eval_epoch = 100
+epoch = 10000
+eval_epoch = 500
 # batch_size = 16  # bs: total bs in all gpus
 batch_size = 1
 num_worker = 1 # worker processes for data loading
 mix_prob = 0.8 # mix3D augmentation probability (https://arxiv.org/pdf/2110.02210)
 empty_cache = True # clear GPU cache after each iteration
-enable_amp = True # automatic mixed precision (float16/32)
+# enable_amp = True # automatic mixed precision (float16/32)
 find_unused_parameters = True # pytorch DDP param, find params not used in forward pass
 
 # copied from base config
@@ -49,7 +49,7 @@ train = dict(
 # model settings
 model = dict(
     type="PPT-LoRA",
-    rank=10,
+    rank=20,
     lora_alpha=20,
     lora_dropout_p=0.0,
     new_conditions = ["Heritage"],
@@ -65,10 +65,9 @@ optimizer=dict(
 )
 
 # scheduler settings
-epoch = 100
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=0.005,
+    max_lr=0.003,
     pct_start=0.05,
     anneal_strategy="cos",
     div_factor=10.0,
@@ -84,7 +83,7 @@ data = dict(
     train=dict(
         type="LibraryDataset",
         split="train",
-        data_root="data/clouds/res0.02_pr0.0195/library",  # Optional, will use default if not specified
+        data_root="data/clouds/res0.05_pr0.049/library",  # Optional, will use default if not specified
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
@@ -100,7 +99,7 @@ data = dict(
             # dict(type="ChromaticTranslation", p=0.95, ratio=0.05),
             # dict(type="ChromaticJitter", p=0.95, std=0.05),
             dict(type="GridSample", grid_size=0.02, hash_type="fnv", mode="train", return_grid_coord=True),
-            dict(type="SphereCrop", point_max=102400, mode="random"),
+            dict(type="SphereCrop", point_max=50000, mode="random"),
             dict(type="CenterShift", apply_z=False),
             dict(type="NormalizeColor"),
             dict(type="ShufflePoint"),
@@ -113,7 +112,7 @@ data = dict(
     val=dict(
         type="LibraryDataset",
         split="val",
-        data_root="data/clouds/res0.02_pr0.0195/library",
+        data_root="data/clouds/res0.05_pr0.049/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),
@@ -129,7 +128,7 @@ data = dict(
     test=dict(
         type="LibraryDataset",
         split="test",
-        data_root="data/clouds/res0.02_pr0.0195/library",
+        data_root="data/clouds/res0.05_pr0.049/library",
         glob_pattern="combined*.pth",
         transform=[
             dict(type="CenterShift", apply_z=True),

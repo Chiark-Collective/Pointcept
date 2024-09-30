@@ -252,7 +252,7 @@ class MLP(nn.Module):
 
 def forward(self, input):
     for k, module in self._modules.items():
-        print(f"PointSequential forward {k}: {module=}")
+        # print(f"PointSequential forward {k}: {module=}")
         # Point module
         if isinstance(module, PointModule):
             # print("point module")
@@ -263,10 +263,10 @@ def forward(self, input):
             if isinstance(input, Point):
                 # print("  is Point")
                 input.sparse_conv_feat = module(input.sparse_conv_feat)
-                print(f"{input.sparse_conv_feat=}")
+                # print(f"{input.sparse_conv_feat=}")
                 input.feat = input.sparse_conv_feat.features
-                print(f"{input.feat.shape=}")
-                analyze_nans(input.feat)
+                # print(f"{input.feat.shape=}")
+                # analyze_nans(input.feat)
             else:
                 # print("  is NOT Point")
                 input = module(input)
@@ -287,14 +287,14 @@ def forward(self, input):
             else:
                 # print("  is neither")
                 input = module(input)
-        try:
-            assert not torch.isnan(input["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
-        except AssertionError as a:
-            print(f"ASSERTION FAILED after PointSequential {module=}")
-            raise
-        else:
-            print(f"ALL GOOD after PointSequential {module=}")
-        print(f"PointSequential input: {input}")
+        # try:
+        #     assert not torch.isnan(input["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
+        # except AssertionError as a:
+        #     print(f"ASSERTION FAILED after PointSequential {module=}")
+        #     raise
+        # else:
+            # print(f"ALL GOOD after PointSequential {module=}")
+        # print(f"PointSequential input: {input}")
     return input
 
 class Block(PointModule):
@@ -365,14 +365,12 @@ class Block(PointModule):
         )
 
     def forward(self, point: Point):
-        print(f"Block forward: {point.keys()=}")
+        # print(f"Block forward: {point.keys()=}")
         try:
             assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         except AssertionError as a:
             print(f"ASSERTION FAILED in Block forward BEGINNING: {self.cpe[0].indice_key}")
             raise
-        else:
-            print(f"ALL GOOD in Block forward BEGINNING: {self.cpe[0].indice_key}")
         shortcut = point.feat
         point = self.cpe(point)
         # print(point["feat"].shape)
@@ -392,8 +390,6 @@ class Block(PointModule):
             # print(f": original point {point}")
             # analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
-        else:
-            print(f"ALL GOOD in Block forward index after CPE: {self.cpe[0].indice_key}")
         # add nan check
 
         point.feat = shortcut + point.feat
@@ -501,7 +497,7 @@ class SerializedPooling(PointModule):
             assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
-            print(f"SerializedPooling forward: original point {point}")
+            # print(f"SerializedPooling forward: original point {point}")
             # analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
         pooling_depth = (math.ceil(self.stride) - 1).bit_length()
@@ -574,7 +570,7 @@ class SerializedPooling(PointModule):
             assert not torch.isnan(point["feat"]).any(), "Encoder: pooling parent tensor contains NaN values"
         except AssertionError as a:
             # print(f"{point_dict['pooling_parent']=}")
-            print(f"{point_proj=}")
+            # print(f"{point_proj=}")
             # analyze_nans(point_dict["pooling_parent"]["feat"])
             raise
         point = Point(point_dict)
@@ -617,7 +613,7 @@ class SerializedUnpooling(PointModule):
         parent = point.pop("pooling_parent")
         inverse = point.pop("pooling_inverse")
         if not self.printed:
-            print(f"{parent=} {inverse=}")
+            # print(f"{parent=} {inverse=}")
             self.printed = True
         assert not torch.isnan(parent["feat"]).any(), "Decoder: pooling parent tensor contains NaN values"
         point = self.proj(point)
@@ -1186,28 +1182,28 @@ class PointTransformerV3(PointModule):
 
 
     def forward(self, data_dict):
-        print("now inside ptv3 forward pass")
-        import joblib
+        # print("now inside ptv3 forward pass")
+        # import joblib
 
         point = Point(data_dict)
-        joblib.dump(point, 'original_point_0.pkl')
+        # joblib.dump(point, 'original_point_0.pkl')
         point.serialization(order=self.order, shuffle_orders=self.shuffle_orders)
-        print(f" serialised input {point=}")
+        # print(f" serialised input {point=}")
         point.sparsify()
-        joblib.dump(point, 'point_after_serialisation_and_sparsification_1.pkl')
+        # joblib.dump(point, 'point_after_serialisation_and_sparsification_1.pkl')
 
         point = self.embedding(point)
-        joblib.dump(point, 'point_after_embedding_2.pkl')
+        # joblib.dump(point, 'point_after_embedding_2.pkl')
 
         point = self.enc(point)
 
         # Save the entire model state before the decoder
-        joblib.dump(point, 'point_after_encoder_3.pkl')
-        torch.save(self.state_dict(), 'model_state_after_encoder.pth')
+        # joblib.dump(point, 'point_after_encoder_3.pkl')
+        # torch.save(self.state_dict(), 'model_state_after_encoder.pth')
 
         if not self.cls_mode:
             point = self.dec(point)
-            joblib.dump(point, 'point_after_decoder_4.pkl')
+            # joblib.dump(point, 'point_after_decoder_4.pkl')
 
         return point
 
