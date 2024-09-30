@@ -268,10 +268,6 @@ class PointPromptTraining(nn.Module):
         # Project features and compute similarities
         feat = self.proj_head(feat)
         feat = feat / feat.norm(dim=-1, keepdim=True)
-        print(f"{feat.shape=}")
-
-        print(f"{self.class_embedding.shape=}")
-        print(f"{feat=} {self.class_embedding=}")
         sim = feat @ self.class_embedding[:].t()
         # print(f"{sim.shape=}")
 

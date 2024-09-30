@@ -265,7 +265,7 @@ class PointPromptTrainingLoRA(nn.Module):
         logger.info(f"{lora_trainable_params} params after LoRA")
 
     def forward(self, *args, **kwargs):
-        print(f"Calling forward of model {self.model}")
+        # print(f"Calling forward of model {self.model}")
         return self.model.forward(*args, **kwargs)
 
 
