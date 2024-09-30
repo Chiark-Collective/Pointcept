@@ -203,8 +203,6 @@ class LibraryDataset(Dataset):
         return data_dict
 
     def __getitem__(self, idx):
-        print("in getitem")
-        print(f"{idx=}")
         if self.test_mode:
             return self.prepare_test_data(idx)
         else:
