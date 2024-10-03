@@ -1,3 +1,4 @@
+import logging
 import os
 import vtk
 import laspy
@@ -40,6 +41,12 @@ def in_docker():
     return os.getenv('INSIDE_POINTCEPT_DOCKER', 'false') == 'true'
 
 
+def disable_trame_logger():
+    """The trame backend for visualisation has an excessively verbose logger. This will stifle it."""
+    logger_dict = logging.Logger.manager.loggerDict
+    for logger_name, logger_obj in logger_dict.items():
+        if isinstance(logger_obj, logging.Logger) and 'trame' in logger_name:
+            logger_obj.setLevel(logging.CRITICAL)
 
 
 def read_ply_mesh(file_path, compute_normals=True):

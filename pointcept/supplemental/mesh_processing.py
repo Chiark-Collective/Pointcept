@@ -537,7 +537,7 @@ class MeshAnalyser:
     #################################################################################
     # Toy pointcloud generation
     #################################################################################  
-    def generate_toy_pcds(self, resolution=0.2, categories=None):
+    def generate_toy_pcds(self, resolution=0.05, categories=None, excluded_categories=None):
         """
         Generate point clouds from the meshes stored in category_dict using MeshSampler.
 
@@ -553,13 +553,16 @@ class MeshAnalyser:
         if categories is None:
             categories = list(self.meshes.keys())
 
+        if not excluded_categories:
+            excluded_categories = []
+
         logger.info(f"Generating toy pointclouds for categories {categories}.")
         logger.info(f"Sampling with resolution {resolution}.")
         pcd_dict = {}
 
         # Iterate over the specified categories
         for category, mesh in self.meshes.items():
-            if category in categories:
+            if category in categories and category not in excluded_categories:
                 # Check if mesh is valid
                 if mesh is not None and mesh.GetNumberOfPoints() > 0:
                     # Initialize MeshSampler with the current mesh
@@ -595,7 +598,7 @@ class MeshAnalyser:
             dict: A dictionary with keys as categories and values as a 2D array of counts per bin.
         """
         # Use the AABB from all meshes to define the bin limits
-        aabb = self.aabb_all_meshes
+        aabb = self.aabb_all_meshes_vtk
         min_pt = aabb['min']
         max_pt = aabb['max']
     
@@ -610,24 +613,28 @@ class MeshAnalyser:
     
         # Evaluate binning for each point cloud
         bin_counts = {}
-        for category, pcd in pcd_dict.items():
-            points = np.asarray(pcd.points)
+        for category, points in pcd_dict.items():
+            # points = np.asarray()
             hist, _, _ = np.histogram2d(points[:, 0], points[:, 1], bins=(x_edges, y_edges))
             bin_counts[category] = hist
     
-        return bin_counts
+        return {
+            'counts': bin_counts,
+            'x_edges': x_edges,
+            'y_edges': y_edges,
+        }
 
-    def generate_library_splits(self, cell_width=3.0, weights=(0.65, 0.2, 0.15), random_seed=9039501):
-        """
-        Function to generate splits with a special algorithm for the library dataset.
-        """
-        category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
-        # transformed_category_cells = transform_cells(category_cells)
-        logger.info("Cell division complete, now assigning to folds and transforming...")
-        splits = split_all_categories(category_cells, weights=weights)
-        process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
-        logger.info("Fold allocation complete!")
-        return splits
+    # def generate_library_splits(self, cell_width=3.0, weights=(0.65, 0.2, 0.15), random_seed=9039501):
+    #     """
+    #     Function to generate splits with a special algorithm for the library dataset.
+    #     """
+    #     category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
+    #     # transformed_category_cells = transform_cells(category_cells)
+    #     logger.info("Cell division complete, now assigning to folds and transforming...")
+    #     splits = split_all_categories(category_cells, weights=weights)
+    #     process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
+    #     logger.info("Fold allocation complete!")
+    #     return splits
 
 
 #################################################################################
