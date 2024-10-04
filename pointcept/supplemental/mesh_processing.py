@@ -92,6 +92,8 @@ class DataHandler:
         self.cc_path = cc_path
         
         self.mesh_dir = self.root_dir / "meshes"
+        self.split_template_dir = self.mesh_dir / "split_templates"
+
         self.raw_mesh_dir = self.mesh_dir / "raw"
         self.extraction_dir = self.mesh_dir / "extracted" / label
         self.transformed_dir = self.extraction_dir / 'transformed'
@@ -105,7 +107,7 @@ class DataHandler:
         self.clouds_root = self.root_dir / "clouds"
 
         # Ensure all necessary mesh directories are created
-        for path in [self.mesh_dir, self.raw_mesh_dir, self.extraction_dir,
+        for path in [self.mesh_dir, self.raw_mesh_dir, self.extraction_dir, self.split_template_dir,
                      self.split_dir, self.clouds_root] + list(self.split_dirs.values()):
             path.mkdir(parents=True, exist_ok=True)
 
@@ -371,7 +373,9 @@ class DataHandler:
             logger.info(f"Label {self.label} does not currently have extracted meshes. Attempting now.")
             self.create_meshes()
         self.load_extracted_meshes_vtk()
-           
+    
+    
+
     def save_splits(self, split_dict):
         """
         Func to save any splits as .ply mesh files in train/test/eval dirs.

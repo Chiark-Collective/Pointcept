@@ -42,11 +42,19 @@ def in_docker():
 
 
 def disable_trame_logger():
-    """The trame backend for visualisation has an excessively verbose logger. This will stifle it."""
+    """Disable verbose loggers related to Trame, ParaView, VTK, and WSLink in the application."""
+    # Get all active loggers
     logger_dict = logging.Logger.manager.loggerDict
+    
+    # Define patterns of logger names we want to silence
+    logger_patterns = ['trame', 'paraview', 'vtk', 'wslink']
+
+    # Iterate over all loggers and adjust their logging levels
     for logger_name, logger_obj in logger_dict.items():
-        if isinstance(logger_obj, logging.Logger) and 'trame' in logger_name:
-            logger_obj.setLevel(logging.CRITICAL)
+        if isinstance(logger_obj, logging.Logger):
+            # Check if the logger name contains any of the specified patterns
+            if any(pattern in logger_name.lower() for pattern in logger_patterns):
+                logger_obj.setLevel(logging.CRITICAL)  # Stifle excessive logging
 
 
 def read_ply_mesh(file_path, compute_normals=True):

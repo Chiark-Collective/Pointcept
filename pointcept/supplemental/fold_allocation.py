@@ -3,6 +3,10 @@ import random
 import heapq
 import matplotlib.pyplot as plt
 import logging
+import joblib
+import itertools
+import pyvista as pv
+from pointcept.supplemental.utils import disable_trame_logger
 
 
 class GridSplitter:
@@ -65,6 +69,7 @@ class GridSplitter:
         self.best_area_category_counts = None
         self.best_area_sizes = None
         self.best_area_bounding_boxes = None
+        self.best_category_percentages = None
 
         # List to store performance metrics per iteration
         self.iteration_metrics = []
@@ -182,7 +187,30 @@ class GridSplitter:
         equality_score = np.mean(category_scores) + penalty
         return equality_score
 
-    def run(self):
+    def compute_category_percentages_with_uncertainties(self, area_category_counts):
+        category_percentages = {}
+        category_uncertainties = {}
+        for area_id in area_category_counts:
+            category_percentages[area_id] = {}
+            category_uncertainties[area_id] = {}
+            for cat in self.categories:
+                count = area_category_counts[area_id][cat]
+                total_cat_count = self.total_category_counts[cat]
+                if total_cat_count > 0:
+                    percentage = (count / total_cat_count) * 100
+                    # Compute binomial uncertainty
+                    p = count / total_cat_count
+                    n = total_cat_count
+                    std_error = np.sqrt(p * (1 - p) / n) * 100  # Convert to percentage
+                else:
+                    percentage = 0
+                    std_error = 0
+                category_percentages[area_id][cat] = percentage
+                category_uncertainties[area_id][cat] = std_error
+        return category_percentages, category_uncertainties
+
+    def run(self, random_seed=4125214):
+        random.seed(random_seed)
         for iteration in range(1, self.iterations + 1):
             self.logger.debug(f"Iteration {iteration}")
 
@@ -282,6 +310,9 @@ class GridSplitter:
                 area_bounding_boxes
             )
 
+            # Compute category percentages and uncertainties
+            category_percentages, category_uncertainties = self.compute_category_percentages_with_uncertainties(area_category_counts)
+
             # Save metrics for this iteration
             iteration_data = {
                 'iteration': iteration,
@@ -289,7 +320,9 @@ class GridSplitter:
                 'grid': grid.copy(),
                 'area_category_counts': {k: v.copy() for k, v in area_category_counts.items()},
                 'area_sizes': area_sizes.copy(),
-                'area_bounding_boxes': [bb.copy() for bb in area_bounding_boxes]
+                'area_bounding_boxes': [bb.copy() for bb in area_bounding_boxes],
+                'category_percentages': {k: v.copy() for k, v in category_percentages.items()},
+                'category_uncertainties': {k: v.copy() for k, v in category_uncertainties.items()}
             }
             self.iteration_metrics.append(iteration_data)
             self.all_iterations_data.append(iteration_data)
@@ -302,12 +335,14 @@ class GridSplitter:
                 self.best_area_category_counts = {k: v.copy() for k, v in area_category_counts.items()}
                 self.best_area_sizes = area_sizes.copy()
                 self.best_area_bounding_boxes = [bb.copy() for bb in area_bounding_boxes]
+                self.best_category_percentages = {k: v.copy() for k, v in category_percentages.items()}
+                self.best_category_uncertainties = {k: v.copy() for k, v in category_uncertainties.items()}
                 self.logger.info(f"New best equality score: {equality_score:.4f} at iteration {iteration}")
 
             # Log counts and percentages per area at DEBUG level
             if self.verbose:
                 log_msg = f"Iteration {iteration} Equality Score: {equality_score:.4f}\n"
-                log_msg += "Category counts per area:\n"
+                log_msg += "Category counts and percentages per area:\n"
                 for area_id in range(1, self.num_areas + 1):
                     log_msg += f"Area {area_id}:\n"
                     total_area_counts = sum(area_category_counts[area_id][cat] for cat in self.categories)
@@ -319,8 +354,9 @@ class GridSplitter:
                     for cat in self.categories:
                         count = area_category_counts[area_id][cat]
                         total_cat_count = self.total_category_counts[cat]
-                        percentage = (count / total_cat_count * 100) if total_cat_count > 0 else 0
-                        log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% of total {cat})\n"
+                        percentage = category_percentages[area_id][cat]
+                        uncertainty = category_uncertainties[area_id][cat]
+                        log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% ± {uncertainty:.2f}% of total {cat})\n"
                     log_msg += f"  Total points in area: {int(total_area_counts)}\n"
                 self.logger.debug(log_msg)
 
@@ -329,12 +365,14 @@ class GridSplitter:
         self.area_category_counts = self.best_area_category_counts
         self.area_sizes = self.best_area_sizes
         self.area_bounding_boxes = self.best_area_bounding_boxes
+        self.category_percentages = self.best_category_percentages
+        self.category_uncertainties = self.best_category_uncertainties
 
         self.logger.info(f"\nBest equality score after {self.iterations} iterations: {self.best_equality_score:.4f}")
         self.logger.info(f"Best iteration: {self.best_iteration}")
 
         # Log the final counts and percentages
-        log_msg = "\nFinal category counts per area:\n"
+        log_msg = "\nFinal category counts and percentages per area:\n"
         for area_id in range(1, self.num_areas + 1):
             log_msg += f"\nArea {area_id}:\n"
             total_area_counts = sum(self.area_category_counts[area_id][cat] for cat in self.categories)
@@ -346,8 +384,9 @@ class GridSplitter:
             for cat in self.categories:
                 count = self.area_category_counts[area_id][cat]
                 total_cat_count = self.total_category_counts[cat]
-                percentage = (count / total_cat_count * 100) if total_cat_count > 0 else 0
-                log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% of total {cat})\n"
+                percentage = self.category_percentages[area_id][cat]
+                uncertainty = self.category_uncertainties[area_id][cat]
+                log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% ± {uncertainty:.2f}% of total {cat})\n"
             log_msg += f"  Total points in area: {int(total_area_counts)}\n"
         self.logger.info(log_msg)
 
@@ -380,7 +419,6 @@ class GridSplitter:
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.show()
-
 
 
 def maximal_rectangle(matrix):
@@ -477,3 +515,228 @@ def process_folds(best_grid):
         print(f"Fold {fold_id} has {len(rectangles)} rectangles with total perimeter {total_perimeter}.")
         plot_fold_rectangles(binary_grid, rectangles, fold_id)
     return fold_rectangles
+
+def persist_best_iteration(gridsplitter, fold_rectangles, filename, compress=3):
+    """
+    Persists the necessary information from the best iteration of GridSplitter and fold_rectangles.
+
+    Args:
+        gridsplitter (GridSplitter): The GridSplitter instance after running the algorithm.
+        fold_rectangles (dict): The fold_rectangles returned from process_folds.
+        filename (str): The filename to save the data using joblib.dump.
+        compress (int): Compression level for joblib.dump (0-9). Default is 3.
+    """
+    data_to_persist = {
+        'best_grid': gridsplitter.best_grid,
+        'best_iteration': gridsplitter.best_iteration,
+        'best_equality_score': gridsplitter.best_equality_score,
+        'best_area_category_counts': gridsplitter.best_area_category_counts,
+        'best_area_sizes': gridsplitter.best_area_sizes,
+        'best_area_bounding_boxes': gridsplitter.best_area_bounding_boxes,
+        'total_category_counts': gridsplitter.total_category_counts,
+        'intended_area_sizes': gridsplitter.intended_area_sizes,
+        'desired_category_counts_list': gridsplitter.desired_category_counts_list,
+        'weights': gridsplitter.weights,
+        'categories': gridsplitter.categories,
+        'fold_rectangles': fold_rectangles,
+        'x_edges': gridsplitter.x_edges,
+        'y_edges': gridsplitter.y_edges,
+    }
+
+    # Include any additional statistics or data as needed
+    # For example, if you have iteration metrics or all iterations data:
+    # 'iteration_metrics': gridsplitter.iteration_metrics,
+    # 'all_iterations_data': gridsplitter.all_iterations_data,
+
+    try:
+        # Save the data using joblib.dump with compression
+        joblib.dump(data_to_persist, filename, compress=compress)
+        print(f"Data from the best iteration has been saved to {filename}")
+    except Exception as e:
+        print(f"An error occurred while saving the data: {e}")
+
+
+def load_best_iteration(filename, logger=None, log_vital_stats=True):
+    """
+    Loads the persisted data from the best iteration and optionally logs the vital statistics.
+
+    Args:
+        filename (str): The filename to load the data from.
+        logger (logging.Logger, optional): An optional logger object. If None, a default logger is used.
+        log_vital_stats (bool): Whether to log the vital statistics on the iteration. Default is True.
+
+    Returns:
+        dict: The loaded data containing the best iteration information.
+    """
+    # Load the data
+    try:
+        data = joblib.load(filename)
+        print(f"Data from {filename} has been loaded successfully.")
+    except Exception as e:
+        print(f"An error occurred while loading the data: {e}")
+        return None
+
+    # Set up logger if not provided
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        logging.basicConfig(level=logging.INFO)
+
+    # Optionally log the vital statistics
+    if log_vital_stats:
+        best_iteration = data.get('best_iteration')
+        best_equality_score = data.get('best_equality_score')
+        total_category_counts = data.get('total_category_counts')
+        categories = data.get('categories')
+        best_area_category_counts = data.get('best_area_category_counts')
+        weights = data.get('weights')
+        intended_area_sizes = data.get('intended_area_sizes')
+        best_area_sizes = data.get('best_area_sizes')
+
+        logger.info(f"Best Iteration: {best_iteration}")
+        logger.info(f"Best Equality Score: {best_equality_score:.4f}")
+
+        # Log category counts and percentages per area
+        num_areas = len(weights)
+        total_cells = sum(best_area_sizes)
+
+        log_msg = "\nFinal category counts per area:\n"
+        for area_id in range(1, num_areas + 1):
+            log_msg += f"\nArea {area_id}:\n"
+            total_area_counts = sum(best_area_category_counts[area_id][cat] for cat in categories)
+            area_size = best_area_sizes[area_id - 1]
+            intended_size = intended_area_sizes[area_id - 1]
+            size_percentage = (area_size / total_cells) * 100
+            intended_percentage = (intended_size / total_cells) * 100
+            log_msg += f"  Area size: {area_size} cells ({size_percentage:.2f}% of total, intended {intended_percentage:.2f}%)\n"
+            for cat in categories:
+                count = best_area_category_counts[area_id][cat]
+                total_cat_count = total_category_counts[cat]
+                percentage = (count / total_cat_count * 100) if total_cat_count > 0 else 0
+                log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% of total {cat})\n"
+            log_msg += f"  Total points in area: {int(total_area_counts)}\n"
+        logger.info(log_msg)
+    return data
+
+
+color_names = [
+    "red", "green", "blue", "purple", "cyan", "orange", "yellow",
+    "pink", "gold", "teal", "lightblue", "darkblue", "lightgreen", "crimson",
+    "coral", "limegreen", "peru", "magenta"
+]
+
+
+# Cycle through colors to handle arbitrary fold IDs
+def get_color_for_fold(fold_id):
+    """
+    Returns a PyVista Color for a given fold ID, cycling through predefined colors.
+    """
+    color_cycle = itertools.cycle(color_names)  # Cycle through color list
+    for _ in range(fold_id):
+        color = next(color_cycle)
+    return pv.Color(color)
+
+
+# Function to plot the mesh folds using either 'trame' or 'static' backends
+def plot_mesh_folds(fold_meshes, backend="static"):
+    """
+    Plots the given mesh folds with the option to use the 'trame' or 'static' PyVista backend.
+
+    Args:
+        fold_meshes (dict): Dictionary of meshes by fold.
+        backend (str): The backend to use for plotting. Either 'trame' or 'static'.
+    """
+    if backend == 'trame':
+        pv.set_jupyter_backend('trame')
+        disable_trame_logger()
+        notebook = True
+    else:
+        pv.set_jupyter_backend('static')
+        notebook = True
+
+    p = pv.Plotter() #notebook=notebook)
+    
+    for fold_id, category_meshes in fold_meshes.items():
+        color = get_color_for_fold(fold_id)
+        for category, mesh in category_meshes.items():
+            p.add_mesh(mesh, color=color, show_edges=True, opacity=0.55)
+    
+    # Show axes and grid
+    p.show_axes_all()
+    p.show_grid(font_size=14)
+    if backend == 'static':
+        p.window_size = [1200, 800]
+
+    # Show the plot
+    p.show(title="Fold Meshes")
+
+
+def map_grid_to_spatial(min_col, max_col, min_row, max_row, x_edges, y_edges):
+    """
+    Map grid indices to spatial coordinates using x_edges and y_edges.
+    
+    Parameters:
+        min_col, max_col, min_row, max_row (int): Grid indices.
+        x_edges, y_edges (array-like): Bin edges for x and y axes.
+    
+    Returns:
+        tuple: xmin, xmax, ymin, ymax mapped to spatial coordinates.
+    """
+    xmin = x_edges[min_col]
+    xmax = x_edges[max_col + 1]  # +1 because x_edges has length grid_size_x + 1
+    ymin = y_edges[min_row]
+    ymax = y_edges[max_row + 1]  # +1 because y_edges has length grid_size_y + 1
+    return xmin, xmax, ymin, ymax
+
+def crop_meshes_per_fold(category_meshes, fold_rectangles, x_edges, y_edges):
+    """
+    Crop meshes for each fold based on rectangular bounding boxes.
+
+    Parameters:
+        category_meshes (dict): Dictionary of category names and corresponding PyVista meshes.
+        fold_rectangles (dict): Dictionary of fold IDs and bounding boxes.
+        x_edges (array-like): Bin edges for x-axis.
+        y_edges (array-like): Bin edges for y-axis.
+
+    Returns:
+        dict: A dictionary containing cropped meshes for each fold and category.
+    """
+    fold_meshes = {}
+    for fold_id, rectangles in fold_rectangles.items():
+        logging.info(f"Processing Fold {fold_id}")
+        
+        # For each category, we'll create a list to store cropped meshes
+        fold_category_meshes = {}
+        
+        for category, mesh in category_meshes.items():
+            mesh = pv.wrap(mesh)  # Ensure the mesh is a PyVista object
+            
+            # Initialize an empty list to collect cropped meshes for this category and fold
+            cropped_meshes = []
+            
+            for rect in rectangles:
+                # Map grid indices to spatial coordinates
+                xmin, xmax, ymin, ymax = map_grid_to_spatial(
+                    rect['min_col'], rect['max_col'], rect['min_row'], rect['max_row'], x_edges, y_edges)
+                
+                # Define the cropping box using the mesh's z bounds for 3D
+                bounds = (xmin, xmax, ymin, ymax, mesh.bounds[4], mesh.bounds[5])
+                
+                # Perform the cropping operation using the axis-aligned bounding box
+                cropped_mesh = mesh.clip_box(bounds, invert=False)
+                
+                if cropped_mesh.n_points > 0:
+                    cropped_meshes.append(cropped_mesh)
+            
+            # Merge the cropped meshes for this category and fold
+            if cropped_meshes:
+                combined_mesh = cropped_meshes[0]
+                for cm in cropped_meshes[1:]:
+                    combined_mesh = combined_mesh.merge(cm)
+                fold_category_meshes[category] = combined_mesh
+            else:
+                logging.warn(f"No mesh data in Fold {fold_id} for category {category}")
+        
+        # Store the combined meshes per fold
+        fold_meshes[fold_id] = fold_category_meshes
+
+    return fold_meshes
