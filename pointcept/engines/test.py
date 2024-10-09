@@ -165,10 +165,10 @@ class SemSegTester(TesterBase):
         comm.synchronize()
         record = {}
         # fragment inference
-        print(f"{self.test_loader=}")
+        # print(f"{self.test_loader=}")
         for idx, data_dict in enumerate(self.test_loader):
-            print(idx)
-            print(data_dict)
+            # print(idx)
+            # print(data_dict)
             end = time.time()
             data_dict = data_dict[0]  # current assume batch size is 1
             fragment_list = data_dict.pop("fragment_list")
@@ -195,7 +195,7 @@ class SemSegTester(TesterBase):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
                     with torch.no_grad():
-                        print(f"{self.model=}")
+                        # print(f"{self.model=}")
                         pred_part = self.model(input_dict)["seg_logits"]
                         # print(f'{self.model(input_dict)["seg_logits"].shape}=')  # (n, k)
                         # raise ValueError

@@ -173,29 +173,28 @@ class LibraryDataset(Dataset):
     def prepare_test_data(self, idx):
         # load data
         data_dict = self.get_data(idx)
-        print("in prepare_test_data")
-        print(f"{data_dict=}")
+        # print("in prepare_test_data")
+        # print(f"{data_dict=}")
         segment = data_dict.pop("segment")
         data_dict = self.transform(data_dict)
         data_dict_list = []
         for aug in self.aug_transform:
             data_dict_list.append(aug(deepcopy(data_dict)))
-        print('a')
+        # print('a')
         input_dict_list = []
         for data in data_dict_list:
-            print(data)
             data_part_list = self.test_voxelize(data)
-            print("done voxelisation")
+            # print("done voxelisation")
             for data_part in data_part_list:
                 if self.test_crop:
                     data_part = self.test_crop(data_part)
                 else:
                     data_part = [data_part]
                 input_dict_list += data_part
-        print('b')
+        # print('b')
         for i in range(len(input_dict_list)):
             input_dict_list[i] = self.post_transform(input_dict_list[i])
-        print('c')
+        # print('c')
         data_dict = dict(
             fragment_list=input_dict_list, segment=segment, name=self.get_data_name(idx)
         )
@@ -203,6 +202,8 @@ class LibraryDataset(Dataset):
         return data_dict
 
     def __getitem__(self, idx):
+        # print("in getitem")
+        # print(f"{idx=}")
         if self.test_mode:
             return self.prepare_test_data(idx)
         else:

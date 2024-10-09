@@ -6,7 +6,12 @@ import logging
 import joblib
 import itertools
 import pyvista as pv
+import vtk
 from pointcept.supplemental.utils import disable_trame_logger
+
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger(__name__)
 
 
 class GridSplitter:
@@ -689,7 +694,7 @@ def map_grid_to_spatial(min_col, max_col, min_row, max_row, x_edges, y_edges):
 
 def crop_meshes_per_fold(category_meshes, fold_rectangles, x_edges, y_edges):
     """
-    Crop meshes for each fold based on rectangular bounding boxes.
+    Crop meshes for each fold based on rectangular bounding boxes using sequential plane clipping.
 
     Parameters:
         category_meshes (dict): Dictionary of category names and corresponding PyVista meshes.
@@ -718,25 +723,72 @@ def crop_meshes_per_fold(category_meshes, fold_rectangles, x_edges, y_edges):
                 xmin, xmax, ymin, ymax = map_grid_to_spatial(
                     rect['min_col'], rect['max_col'], rect['min_row'], rect['max_row'], x_edges, y_edges)
                 
-                # Define the cropping box using the mesh's z bounds for 3D
-                bounds = (xmin, xmax, ymin, ymax, mesh.bounds[4], mesh.bounds[5])
+                # Create planes for clipping
+                planes = [
+                    ('x', xmin, False),  # Left plane
+                    ('x', xmax, True),   # Right plane
+                    ('y', ymin, False),  # Bottom plane
+                    ('y', ymax, True),   # Top plane
+                ]
                 
-                # Perform the cropping operation using the axis-aligned bounding box
-                cropped_mesh = mesh.clip_box(bounds, invert=False)
+                # Start with the original mesh and sequentially clip with each plane
+                clipped_mesh = mesh
+                for axis, origin, invert in planes:
+                    normal = {'x': (1, 0, 0), 'y': (0, 1, 0)}[axis]
+                    point = [origin, 0, 0] if axis == 'x' else [0, origin, 0]
+                    clipped_mesh = clipped_mesh.clip(normal=normal, origin=point, invert=invert)
+                    if clipped_mesh.n_points == 0:
+                        break  # No points left, exit early
+                if clipped_mesh.n_points > 0:
+                    cropped_meshes.append(clipped_mesh)
+                else:
+                    logging.debug(f"Cropping resulted in empty mesh for rectangle {rect} in category {category}")
                 
-                if cropped_mesh.n_points > 0:
-                    cropped_meshes.append(cropped_mesh)
-            
             # Merge the cropped meshes for this category and fold
             if cropped_meshes:
                 combined_mesh = cropped_meshes[0]
                 for cm in cropped_meshes[1:]:
-                    combined_mesh = combined_mesh.merge(cm)
+                    combined_mesh = combined_mesh.merge(cm, merge_points=True, main_has_priority=False)
                 fold_category_meshes[category] = combined_mesh
             else:
-                logging.warn(f"No mesh data in Fold {fold_id} for category {category}")
+                logging.warning(f"No mesh data in Fold {fold_id} for category {category}")
         
         # Store the combined meshes per fold
         fold_meshes[fold_id] = fold_category_meshes
 
     return fold_meshes
+
+
+def save_splits(dh, splits):
+    """
+    Merge cells for each fold-category permutation and save them to disk.
+
+    Args:
+        dh (DataHandler): An object with a split_dirs attribute, containing directories for 'train', 'test', 'eval'.
+        splits (dict): A dictionary containing fold-category mappings of cells. 
+                       Example: {'train': {'category1': [cell1, cell2, ...], 'category2': [...]}}
+
+    Returns:
+        None: The function saves the merged meshes directly to disk.
+    """
+    dh._ensure_split_dirs()
+    # Iterate over the splits dictionary (e.g., 'train', 'test', 'eval')
+    for fold, categories in splits.items():
+        # Get the appropriate directory for the fold from DataHandler
+        fold_dir = dh.split_dirs.get(fold)
+        cell_counter = 0
+        # Iterate over each category in the fold
+        for category, mesh in categories.items():
+            if mesh.n_points == 0 and combined_mesh.n_cells == 0:
+                logger.warn(f"Fold: {fold}, Category: {category} has an empty mesh!")
+            mesh.GetPointData().SetActiveNormals('Normals')
+
+            output_file = fold_dir / f"{category.lower()}.ply"           
+            # Save the merged mesh to disk using vtk for control over color storage
+            writer = vtk.vtkPLYWriter()
+            writer.SetFileName(output_file.as_posix())
+            writer.SetInputData(mesh)
+            writer.SetColorModeToDefault()  # Ensure colors are written from the Scalars
+            writer.SetArrayName('RGB')
+            writer.Write()
+            logger.info(f"Fold {fold}, category {category} saved.")
