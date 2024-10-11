@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+import matplotlib.pyplot as plt
 
 
 _current_label = 'v1'
@@ -217,3 +218,80 @@ def print_dict_structure(data, indent=0):
             print(type(value))
 
 
+# Plotting functions
+def lighten_color(color, amount=0.5):
+    """
+    Lightens the given color by multiplying (1 - amount) to the existing RGB values.
+    """
+    import matplotlib.colors as mc
+    import colorsys
+    try:
+        c = mc.cnames[color]
+    except KeyError:
+        c = color
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    lightened_color = colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
+    return lightened_color
+
+
+def shift_color_towards_red(color, amount=0.03):
+    """
+    Shifts the given color slightly towards the red part of the spectrum by adjusting the hue.
+    
+    Args:
+        color: The color to shift (can be a named color or RGB tuple).
+        amount: The amount by which to shift the hue towards red (default: 0.1). 
+                Positive values shift towards red.
+                
+    Returns:
+        A tuple representing the RGB values of the adjusted color.
+    """
+    import matplotlib.colors as mc
+    import colorsys
+    
+    try:
+        c = mc.cnames[color]
+    except KeyError:
+        c = color
+    
+    # Convert to HLS color space
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    
+    # Shift hue towards red
+    new_hue = (c[0] - amount) % 1  # Ensure hue stays within [0, 1]
+    
+    # Convert back to RGB
+    shifted_color = colorsys.hls_to_rgb(new_hue, c[1], c[2])
+    
+    return shifted_color
+
+def desaturate_color(color, amount=0.05):
+    """
+    Desaturates the given color by reducing its saturation.
+    
+    Args:
+        color: The color to desaturate (can be a named color or RGB tuple).
+        amount: The amount by which to reduce the saturation (default: 0.5). 
+                1.0 means fully desaturated (gray), and 0.0 means no change.
+                
+    Returns:
+        A tuple representing the RGB values of the desaturated color.
+    """
+    import matplotlib.colors as mc
+    import colorsys
+    
+    try:
+        c = mc.cnames[color]
+    except KeyError:
+        c = color
+    
+    # Convert to HLS color space
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    
+    # Reduce the saturation based on the amount
+    new_saturation = c[2] * (1 - amount)  # Scale down the saturation
+    
+    # Convert back to RGB
+    desaturated_color = colorsys.hls_to_rgb(c[0], c[1], new_saturation)
+    
+    return desaturated_color

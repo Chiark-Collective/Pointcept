@@ -7,11 +7,107 @@ import joblib
 import itertools
 import pyvista as pv
 import vtk
-from pointcept.supplemental.utils import disable_trame_logger
+from pointcept.supplemental.utils import *
+import numpy as np
+import heapq
+import random
+from copy import deepcopy
+import logging
+from itertools import count
+import joblib
+from matplotlib.patches import Rectangle
+import matplotlib.lines as mlines
+from matplotlib.collections import PatchCollection
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
+
+
+class Fold:
+    def __init__(self, fold_id, weight, region_count, categories):
+        self.fold_id = fold_id
+        self.weight = weight
+        self.region_count = region_count
+        self.categories = categories
+        self.order_counter = 1  # Initialize per-region order counter
+
+        # Initialize counts
+        self.total_counts = 0
+        self.category_counts = {cat: 0 for cat in categories}
+
+        # Regions within the fold
+        self.regions = []
+
+        # Intended counts and cell counts will be set later
+        self.intended_total_counts = 0
+        self.intended_cell_counts = 0
+
+    def add_region(self, region):
+        self.regions.append(region)
+        region.fold = self
+        # Compute intended counts for the region
+        region.compute_intended_counts()
+
+    def update_counts(self, counts):
+        self.total_counts += counts['total']
+        for cat in self.categories:
+            self.category_counts[cat] += counts[cat]
+
+    def compute_intended_counts(self, total_counts, total_cells):
+        self.intended_total_counts = self.weight * total_counts
+        self.intended_cell_counts = self.weight * total_cells
+
+    def reset(self):
+        """Called between iterations."""
+        self.total_counts = 0
+        self.category_counts = {cat: 0 for cat in self.categories}
+        for region in self.regions:
+            region.reset()
+
+
+class Region:
+    def __init__(self, region_id, categories, weight):
+        self.region_id = region_id
+        self.categories = categories
+        self.fold = None  # Will be set when added to a fold
+        self.weight = weight
+        
+        # Initialize counts
+        self.total_counts = 0
+        self.category_counts = {cat: 0 for cat in categories}
+        self.cell_count = 0  # Number of populated cells in the region
+
+        # Bounding box for compactness calculations
+        self.bounding_box = {'min_i': None, 'max_i': None, 'min_j': None, 'max_j': None}
+
+        # Intended counts and cell counts will be set later
+        self.intended_total_counts = 0
+        self.intended_cell_counts = 0
+
+
+    def reset(self):
+        """Called between iterations."""
+        self.order_counter = 1
+        self.total_counts = 0
+        self.category_counts = {cat: 0 for cat in self.categories}
+        self.cell_count = 0
+        self.bounding_box = {'min_i': None, 'max_i': None, 'min_j': None, 'max_j': None}
+
+    def update_counts(self, counts):
+        self.total_counts += counts['total']
+        self.cell_count += counts['cell']
+        for cat in self.categories:
+            self.category_counts[cat] += counts[cat]
+
+    def compute_intended_counts(self):
+        if self.fold:
+            self.intended_total_counts = self.fold.intended_total_counts / self.fold.region_count
+            self.intended_cell_counts = self.fold.intended_cell_counts / self.fold.region_count
+        else:
+            raise ValueError("Region is not associated with a fold.")
+
+
 
 
 class GridSplitter:
@@ -521,108 +617,6 @@ def process_folds(best_grid):
         plot_fold_rectangles(binary_grid, rectangles, fold_id)
     return fold_rectangles
 
-def persist_best_iteration(gridsplitter, fold_rectangles, filename, compress=3):
-    """
-    Persists the necessary information from the best iteration of GridSplitter and fold_rectangles.
-
-    Args:
-        gridsplitter (GridSplitter): The GridSplitter instance after running the algorithm.
-        fold_rectangles (dict): The fold_rectangles returned from process_folds.
-        filename (str): The filename to save the data using joblib.dump.
-        compress (int): Compression level for joblib.dump (0-9). Default is 3.
-    """
-    data_to_persist = {
-        'best_grid': gridsplitter.best_grid,
-        'best_iteration': gridsplitter.best_iteration,
-        'best_equality_score': gridsplitter.best_equality_score,
-        'best_area_category_counts': gridsplitter.best_area_category_counts,
-        'best_area_sizes': gridsplitter.best_area_sizes,
-        'best_area_bounding_boxes': gridsplitter.best_area_bounding_boxes,
-        'total_category_counts': gridsplitter.total_category_counts,
-        'intended_area_sizes': gridsplitter.intended_area_sizes,
-        'desired_category_counts_list': gridsplitter.desired_category_counts_list,
-        'weights': gridsplitter.weights,
-        'categories': gridsplitter.categories,
-        'fold_rectangles': fold_rectangles,
-        'x_edges': gridsplitter.x_edges,
-        'y_edges': gridsplitter.y_edges,
-    }
-
-    # Include any additional statistics or data as needed
-    # For example, if you have iteration metrics or all iterations data:
-    # 'iteration_metrics': gridsplitter.iteration_metrics,
-    # 'all_iterations_data': gridsplitter.all_iterations_data,
-
-    try:
-        # Save the data using joblib.dump with compression
-        joblib.dump(data_to_persist, filename, compress=compress)
-        print(f"Data from the best iteration has been saved to {filename}")
-    except Exception as e:
-        print(f"An error occurred while saving the data: {e}")
-
-
-def load_best_iteration(filename, logger=None, log_vital_stats=True):
-    """
-    Loads the persisted data from the best iteration and optionally logs the vital statistics.
-
-    Args:
-        filename (str): The filename to load the data from.
-        logger (logging.Logger, optional): An optional logger object. If None, a default logger is used.
-        log_vital_stats (bool): Whether to log the vital statistics on the iteration. Default is True.
-
-    Returns:
-        dict: The loaded data containing the best iteration information.
-    """
-    # Load the data
-    try:
-        data = joblib.load(filename)
-        print(f"Data from {filename} has been loaded successfully.")
-    except Exception as e:
-        print(f"An error occurred while loading the data: {e}")
-        return None
-
-    # Set up logger if not provided
-    if logger is None:
-        logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.INFO)
-
-    # Optionally log the vital statistics
-    if log_vital_stats:
-        best_iteration = data.get('best_iteration')
-        best_equality_score = data.get('best_equality_score')
-        total_category_counts = data.get('total_category_counts')
-        categories = data.get('categories')
-        best_area_category_counts = data.get('best_area_category_counts')
-        weights = data.get('weights')
-        intended_area_sizes = data.get('intended_area_sizes')
-        best_area_sizes = data.get('best_area_sizes')
-
-        logger.info(f"Best Iteration: {best_iteration}")
-        logger.info(f"Best Equality Score: {best_equality_score:.4f}")
-
-        # Log category counts and percentages per area
-        num_areas = len(weights)
-        total_cells = sum(best_area_sizes)
-
-        log_msg = "\nFinal category counts per area:\n"
-        for area_id in range(1, num_areas + 1):
-            log_msg += f"\nArea {area_id}:\n"
-            total_area_counts = sum(best_area_category_counts[area_id][cat] for cat in categories)
-            area_size = best_area_sizes[area_id - 1]
-            intended_size = intended_area_sizes[area_id - 1]
-            size_percentage = (area_size / total_cells) * 100
-            intended_percentage = (intended_size / total_cells) * 100
-            log_msg += f"  Area size: {area_size} cells ({size_percentage:.2f}% of total, intended {intended_percentage:.2f}%)\n"
-            for cat in categories:
-                count = best_area_category_counts[area_id][cat]
-                total_cat_count = total_category_counts[cat]
-                percentage = (count / total_cat_count * 100) if total_cat_count > 0 else 0
-                log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% of total {cat})\n"
-            log_msg += f"  Total points in area: {int(total_area_counts)}\n"
-        logger.info(log_msg)
-    return data
-
-
 color_names = [
     "red", "green", "blue", "purple", "cyan", "orange", "yellow",
     "pink", "gold", "teal", "lightblue", "darkblue", "lightgreen", "crimson",
@@ -765,9 +759,7 @@ def save_splits(dh, splits):
 
     Args:
         dh (DataHandler): An object with a split_dirs attribute, containing directories for 'train', 'test', 'eval'.
-        splits (dict): A dictionary containing fold-category mappings of cells. 
-                       Example: {'train': {'category1': [cell1, cell2, ...], 'category2': [...]}}
-
+        splits (dict): A dictionary containing fold-category mappings of meshes. 
     Returns:
         None: The function saves the merged meshes directly to disk.
     """
