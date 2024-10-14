@@ -18,6 +18,7 @@ import joblib
 from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
 from matplotlib.collections import PatchCollection
+from matplotlib import cm
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
@@ -108,76 +109,478 @@ class Region:
             raise ValueError("Region is not associated with a fold.")
 
 
+class FoldConfiguration:
+    def __init__(self, iteration, grid, folds, categories, total_category_counts, total_counts,
+                 total_populated_cells, x_edges, y_edges, region_cell_order):
+        self.iteration = iteration
+        self.grid = grid
+        self.folds = folds
+        self.categories = categories
+        self.total_category_counts = total_category_counts
+        self.total_counts = total_counts
+        self.total_populated_cells = total_populated_cells
+        self.x_edges = x_edges
+        self.y_edges = y_edges
+        self.region_cell_order = region_cell_order
+        self.compute_category_percentages()
+        self.prepare_summary()
+
+    def compute_category_percentages(self):
+        self.fold_percentages = {}
+        self.region_percentages = {}
+
+        # Compute fold percentages
+        for fold_id, fold in self.folds.items():
+            percentages = {}
+            for cat in self.categories:
+                count = fold.category_counts[cat]
+                total_cat_count = self.total_category_counts[cat]
+                if total_cat_count > 0:
+                    p = count / total_cat_count
+                    percentages[cat] = {'percentage': p * 100}
+                else:
+                    percentages[cat] = {'percentage': 0}
+            self.fold_percentages[fold_id] = percentages
+
+            # Compute region percentages within each fold
+            for region in fold.regions:
+                region_percentages = {}
+                for cat in self.categories:
+                    count = region.category_counts[cat]
+                    total_cat_count = self.total_category_counts[cat]
+                    if total_cat_count > 0:
+                        p = count / total_cat_count
+                        region_percentages[cat] = {'percentage': p * 100}
+                    else:
+                        region_percentages[cat] = {'percentage': 0}
+                self.region_percentages[region.region_id] = region_percentages
+
+    def prepare_summary(self):
+        self.summary = {
+            'iteration': self.iteration,
+            'folds': {}
+        }
+
+        for fold_id, fold in self.folds.items():
+            fold_data = {
+                'fold_id': fold_id,
+                'total_counts': fold.total_counts,
+                'intended_total_counts': fold.intended_total_counts,
+                'category_counts': fold.category_counts.copy(),
+                'percentages': self.fold_percentages[fold_id],
+                'regions': {}
+            }
+            for region in fold.regions:
+                region_data = {
+                    'region_id': region.region_id,
+                    'total_counts': region.total_counts,
+                    'intended_total_counts': region.intended_total_counts,
+                    'category_counts': region.category_counts.copy(),
+                    'percentages': self.region_percentages[region.region_id],
+                    'cell_count': region.cell_count,
+                    'intended_cell_counts': region.intended_cell_counts,
+                    'bounding_box': region.bounding_box.copy(),
+                }
+                fold_data['regions'][region.region_id] = region_data
+            self.summary['folds'][fold_id] = fold_data
+
+    def print_summary(self):
+        print(f"Iteration: {self.iteration}")
+        print("\nFold Summaries:")
+        for fold_data in self.summary['folds'].values():
+            fold_id = fold_data['fold_id']
+            num_regions = len(fold_data['regions'])
+            print(f"\nFold {fold_id}:")
+            print(f"  Intended total counts: {fold_data['intended_total_counts']:.2f}")
+            print(f"  Actual total counts: {fold_data['total_counts']}")
+            print(f"  Category Counts:")
+            for cat in self.categories:
+                count = fold_data['category_counts'][cat]
+                percentage_info = fold_data['percentages'][cat]
+                percentage = percentage_info['percentage']
+                print(f"    {cat}: {count} ({percentage:.2f}% of total {cat})")
+            if num_regions == 1:
+                # If only one region, append aspect ratio info here
+                region_data = next(iter(fold_data['regions'].values()))
+                bb = region_data['bounding_box']
+                height = bb['max_i'] - bb['min_i'] + 1
+                width = bb['max_j'] - bb['min_j'] + 1
+                aspect_ratio = max(height / width, width / height) if width > 0 and height > 0 else 1
+                print(f"  Aspect Ratio: {aspect_ratio:.2f}")
+            else:
+                print(f"  Regions:")
+                for region_data in fold_data['regions'].values():
+                    region_id = region_data['region_id']
+                    print(f"    Region {region_id}:")
+                    print(f"      Intended total counts: {region_data['intended_total_counts']:.2f}")
+                    print(f"      Actual total counts: {region_data['total_counts']}")
+                    print(f"      Category Counts:")
+                    for cat in self.categories:
+                        count = region_data['category_counts'][cat]
+                        percentage_info = region_data['percentages'][cat]
+                        percentage = percentage_info['percentage']
+                        print(f"        {cat}: {count} ({percentage:.2f}% of total {cat})")
+                    bb = region_data['bounding_box']
+                    height = bb['max_i'] - bb['min_i'] + 1
+                    width = bb['max_j'] - bb['min_j'] + 1
+                    aspect_ratio = max(height / width, width / height) if width > 0 and height > 0 else 1
+                    print(f"      Aspect Ratio: {aspect_ratio:.2f}")
+
+    def extract_scaled_cell_boundaries(self, mask):
+        x_edges = self.x_edges
+        y_edges = self.y_edges
+        boundaries = []
+        rows, cols = mask.shape
+        for i in range(rows):
+            for j in range(cols):
+                if mask[i, j] == 1:  # If the cell is part of the region
+                    # Top boundary
+                    if i == 0 or mask[i-1, j] == 0:
+                        boundaries.append([[y_edges[i], x_edges[j]], [y_edges[i], x_edges[j+1]]])
+                    # Bottom boundary
+                    if i == rows-1 or mask[i+1, j] == 0:
+                        boundaries.append([[y_edges[i+1], x_edges[j]], [y_edges[i+1], x_edges[j+1]]])
+                    # Left boundary
+                    if j == 0 or mask[i, j-1] == 0:
+                        boundaries.append([[y_edges[i], x_edges[j]], [y_edges[i+1], x_edges[j]]])
+                    # Right boundary
+                    if j == cols-1 or mask[i, j+1] == 0:
+                        boundaries.append([[y_edges[i], x_edges[j+1]], [y_edges[i+1], x_edges[j+1]]])
+        return boundaries
+    
+    def plot(self, cmap='tab20'):   
+        # Plotting the grid and the sub-areas
+        fig, ax = plt.subplots(figsize=(10, 8))
+        grid_size_y, grid_size_x = self.grid.shape
+        x_edges = self.x_edges
+        y_edges = self.y_edges
+    
+        ax.set_xlim(x_edges[0], x_edges[-1])
+        ax.set_ylim(y_edges[0], y_edges[-1])
+        ax.set_aspect('equal')
+        
+        # For plotting, we need to know the x and y positions of the grid cells
+        x_positions = x_edges[:-1]
+        y_positions = y_edges[:-1]
+    
+        # Build a mapping from fold IDs to region IDs
+        fold_to_regions = {}
+        for fold_id, fold in self.folds.items():
+            fold_to_regions[fold_id] = [region.region_id for region in fold.regions]
+    
+        # Assign colors to folds
+        num_folds = len(fold_to_regions)
+        fold_colors = plt.get_cmap(cmap, num_folds*2)
+        fold_id_to_color = {}
+        for idx, fold_id in enumerate(sorted(fold_to_regions.keys())):
+            fold_id_to_color[fold_id] = fold_colors(idx)
+    
+        # Assign base colors to regions (subregions)
+        region_id_to_base_color = {}
+        region_id_to_subregion_number = {}
+        for fold_id, region_ids in fold_to_regions.items():
+            fold_base_color = fold_id_to_color[fold_id]
+            num_regions = len(region_ids)
+            region_ids_sorted = sorted(region_ids)
+            for idx, region_id in enumerate(region_ids_sorted, start=1):
+                # Generate desaturated colors for subregions
+                amount = 0.01 + 0.3 * (1 - (idx - 1) / max(num_regions - 1, 1))
+                region_base_color = desaturate_color(fold_base_color, amount=amount)
+                region_id_to_base_color[region_id] = region_base_color
+                # Assign subregion number within the fold
+                region_id_to_subregion_number[region_id] = idx
+    
+        # Build mappings for cell orders
+        cell_to_order = {}
+        for region_id, cell_orders in self.region_cell_order.items():
+            for (i, j), global_order, region_order in cell_orders:
+                cell_to_order[(i, j)] = {
+                    'region_id': region_id,
+                    'global_order': global_order,
+                    'region_order': region_order
+                }
+    
+        region_id_to_max_order = {}
+        for region_id, cell_orders in self.region_cell_order.items():
+            region_order_numbers = [region_order for (_, _), _, region_order in cell_orders]
+            max_region_order = max(region_order_numbers)
+            region_id_to_max_order[region_id] = max_region_order
+    
+        # Collect patches for each region
+        region_patches = {}
+    
+        # Now plot the grid and collect patches
+        width = 0
+        height = 0
+        for i in range(grid_size_y):
+            for j in range(grid_size_x):
+                region_id = self.grid[i, j]
+                if region_id > 0:
+                    x = x_positions[j]
+                    y = y_positions[i]
+                    width = x_edges[j + 1] - x_edges[j]
+                    height = y_edges[i + 1] - y_edges[i]
+    
+                    # Get the cell order information
+                    order_info = cell_to_order.get((i, j), None)
+                    if order_info:
+                        global_order = order_info['global_order']
+                        region_order = order_info['region_order']
+                        max_region_order = region_id_to_max_order[region_id]
+    
+                        # Compute the color based on region order
+                        if max_region_order > 1:
+                            amount = 0.7 + 0.3 * (1 - (region_order - 1) / (max_region_order - 1))
+                        else:
+                            amount = 1.0  # Only one cell, use darkest color
+    
+                        base_color = region_id_to_base_color[region_id]
+                        facecolor = lighten_color(base_color, amount=amount)
+                    else:
+                        # Default color if no order info
+                        facecolor = region_id_to_base_color[region_id]
+    
+                    rect = Rectangle((x, y), width, height)
+                    region_patches.setdefault(region_id, []).append((rect, facecolor))
+    
+                    # Annotate the cell with order numbers
+                    if order_info:
+                        # Global order number at bottom right
+                        text_x = x + width * 0.95
+                        text_y = y + height * 0.05
+                        ax.text(text_x, text_y, f'{order_info["global_order"]}', ha='right', va='bottom',
+                                fontsize=6, color='black', weight='bold',
+                                bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    
+                        # Region order number at top right
+                        text_x_top = x + width * 0.05
+                        text_y_top = y + height * 0.05
+                        # ax.text(text_x_top, text_y_top, f'{order_info["region_order"]}', ha='left', va='bottom',
+                        #         fontsize=6, color='black', weight='bold',
+                        #         bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    
+        # Add patches to the plot
+        for region_id, patches_and_colors in region_patches.items():
+            patches = [p for p, c in patches_and_colors]
+            facecolors = [c for p, c in patches_and_colors]
+            patch_collection = PatchCollection(patches, facecolors=facecolors,
+                                               edgecolor='black', linewidth=0)
+            ax.add_collection(patch_collection)
+
+        # Now, for each region, find its perimeter and draw it
+        for region_id in region_patches.keys():
+            region_mask = (self.grid == region_id).astype(np.uint8)          
+            scaled_cell_boundaries = self.extract_scaled_cell_boundaries(region_mask)
+            for boundary in scaled_cell_boundaries:
+                x_coords = [boundary[0][1], boundary[1][1]]  # Columns (x-axis)
+                y_coords = [boundary[0][0], boundary[1][0]]  # Rows (y-axis)
+                ax.plot(x_coords, y_coords, color='black', linewidth=2)
+        
+        # Plot seed cells with a special marker and label them
+        seed_cells = {}
+        for region_id, cells in self.region_cell_order.items():
+            if cells:
+                (i, j), _, _ = cells[0]  # The first cell is the seed cell
+                seed_cells[region_id] = (i, j)
+        for region_id, (i, j) in seed_cells.items():
+            x = x_positions[j] + (x_edges[j + 1] - x_edges[j]) / 2
+            y = y_positions[i] + (y_edges[i + 1] - y_edges[i]) / 2
+            y_upper = y + height * 0.2
+            y_lower = y - height * 0.2
+
+            fold_id = self.region_id_to_fold_id(region_id)
+            subregion_number = region_id_to_subregion_number[region_id]
+            ax.plot(x, y_lower, marker='*', markersize=10, color='red', markeredgecolor='black', markeredgewidth=0.5)
+            annotation = fold_id
+            if len(fold_to_regions[fold_id]) > 1:
+                annotation = f'{fold_id}.{subregion_number}'
+            ax.text(x, y_upper, annotation, ha='center', va='center',
+                    fontsize=7, color='black', weight='bold',
+                    bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+
+        # Create legend for folds
+        seed_cell_marker = mlines.Line2D([], [], color='red', marker='*', linestyle='None',
+                                 markersize=10, markeredgecolor='black', markeredgewidth=0.5)
+        legend_elements = [seed_cell_marker]
+        legend_labels = ['Seed Cells']
+        for fold_id in sorted(fold_to_regions.keys()):
+            fold_color = fold_id_to_color[fold_id]
+            fold_patch = plt.Rectangle((0, 0), 1, 1, facecolor=fold_color)
+            legend_elements.append(fold_patch)
+            legend_labels.append(f'Fold {fold_id}')
+        legend = ax.legend(
+            legend_elements, legend_labels, loc='upper right',
+            bbox_to_anchor=(1.39, 1), borderaxespad=0., frameon=True, fontsize=10,
+        )
+        legend.get_frame().set_facecolor('white')
+        legend.get_frame().set_edgecolor('black')
+        legend.get_frame().set_alpha(1.0)
+
+        plt.title('Fold Geometry')
+        plt.xlabel('X (m)')
+        plt.ylabel('Y (m)')
+        plt.tight_layout()
+        plt.show()
+
+    def region_id_to_fold_id(self, region_id):
+        for fold_id, fold in self.folds.items():
+            for region in fold.regions:
+                if region.region_id == region_id:
+                    return fold_id
+        return None
+
+    def save(self, filename):
+        # Save the FoldConfiguration instance to disk using joblib
+        joblib.dump(self, filename)
+
+    @staticmethod
+    def load(filename):
+        # Load a FoldConfiguration instance from disk using joblib
+        return joblib.load(filename)
+
+
+    def generate_fold_rectangles(self, combine_subregions=True, plot=True):
+        """
+        Generate rectangles for each fold or its subregions based on the combine_subregions flag.
+
+        Parameters:
+            combine_subregions (bool): 
+                If True, combine all subregions within a fold into a single set of rectangles.
+                If False, process each subregion's rectangles separately.
+            plot (bool): Whether to plot the rectangles. Default is True.
+
+        Returns:
+            dict: A dictionary containing the combine_subregions flag and fold rectangles.
+                  {
+                      'combine_subregions': bool,
+                      'fold_rectangles': {
+                          fold_id: [rect1, rect2, ...],  # If combined
+                          fold_id: {region_id: [rect1, rect2, ...], ...},  # If separate
+                          ...
+                      }
+                  }
+        """
+        fold_rectangles = {}
+        grid = self.grid
+        folds = self.folds
+
+        for fold_id, fold in folds.items():
+            if combine_subregions:
+                # Combine all subregions into one binary grid
+                region_ids = [region.region_id for region in fold.regions]
+                binary_grid = np.isin(grid, region_ids).astype(int)
+                rectangles = find_rectangles_by_maximal_rectangle(binary_grid)
+                fold_rectangles[fold_id] = rectangles
+
+                # Calculate total perimeter
+                perimeter = sum(
+                    2 * ((rect['max_row'] - rect['min_row'] + 1) + (rect['max_col'] - rect['min_col'] + 1))
+                    for rect in rectangles
+                )
+                logging.info(f"Fold {fold_id}: Found {len(rectangles)} rectangles with total perimeter {perimeter}")
+
+                if plot:
+                    plot_fold_rectangles(binary_grid, rectangles, f"Fold {fold_id} (Combined Subregions)")
+            else:
+                # Process each subregion separately
+                fold_rectangles[fold_id] = {}
+                for region in fold.regions:
+                    region_id = region.region_id
+                    binary_grid = (grid == region_id).astype(int)
+                    rectangles = find_rectangles_by_maximal_rectangle(binary_grid)
+                    fold_rectangles[fold_id][region_id] = rectangles
+
+                    # Calculate total perimeter
+                    perimeter = sum(
+                        2 * ((rect['max_row'] - rect['min_row'] + 1) + (rect['max_col'] - rect['min_col'] + 1))
+                        for rect in rectangles
+                    )
+                    logging.info(f"Fold {fold_id}, Region {region_id}: Found {len(rectangles)} rectangles with total perimeter {perimeter}")
+
+                    if plot:
+                        plot_fold_rectangles(binary_grid, rectangles, f"Fold {fold_id}, Region {region_id}")
+
+        return {
+            'combine_subregions': combine_subregions,
+            'fold_rectangles': fold_rectangles
+        }
 
 
 class GridSplitter:
-    def __init__(self, counts, x_edges, y_edges, weights, iterations=100, min_percentage_threshold=5, verbose=True, logger=None):
-        # Initialize parameters
+    def __init__(self, counts, x_edges, y_edges, weights, region_counts, iterations=100):
+        """
+        Initializes the GridSplitter.
+
+        Args:
+            counts (dict): Dictionary mapping categories to arrays of counts.
+            x_edges (array): Array of x-axis bin edges.
+            y_edges (array): Array of y-axis bin edges.
+            weights (dict): Dictionary mapping fold IDs to weights.
+            region_counts (dict): Dictionary mapping fold IDs to the number of regions in each fold.
+            iterations (int): Number of iterations to run the algorithm.
+            min_percentage_threshold (float): Minimum percentage threshold for category representation.
+            size_penalty_multiplier (float): Multiplier for the size deviation in the priority function.
+            aspect_ratio_penalty_multiplier (float): Multiplier for the aspect ratio penalty.
+        """
         self.counts = counts
         self.x_edges = x_edges
         self.y_edges = y_edges
         self.weights = weights
+        self.region_counts = region_counts
         self.iterations = iterations
-        self.min_percentage_threshold = min_percentage_threshold
-        self.verbose = verbose
 
-        # Set up logging
-        self.logger = logger or logging.getLogger(__name__)
-
-        # Extract categories and map to indices
+        self.min_percentage_threshold = 3.0
+        self.size_penalty_multiplier = 1.0
+        self.aspect_ratio_penalty_multiplier = 1.0
+        self.size_incentive_multiplier = 1000.0
+        
         self.categories = list(counts.keys())
-        self.num_categories = len(self.categories)
-        self.category_to_index = {cat: idx for idx, cat in enumerate(self.categories)}
+        self.grid_size_x = len(x_edges) - 1
+        self.grid_size_y = len(y_edges) - 1
 
-        # Compute total counts per category
+        # Initialize total category counts
         self.total_category_counts = {cat: np.sum(counts[cat]) for cat in self.categories}
+        self.total_counts = sum(self.total_category_counts.values())
 
-        # Get grid size from counts arrays
-        self.grid_size_x, self.grid_size_y = counts[self.categories[0]].shape  # Swap the order
+        # Prepare category counts grid
+        self.category_counts_grid = np.zeros((self.grid_size_y, self.grid_size_x, len(self.categories)))
+        for idx, cat in enumerate(self.categories):
+            self.category_counts_grid[:, :, idx] = counts[cat].T
 
-        # Create category_counts_grid of shape (grid_size_y, grid_size_x, num_categories)
-        self.category_counts_grid = np.zeros((self.grid_size_y, self.grid_size_x, self.num_categories))
+        # Initialize folds
+        self.folds = {}
+        for fold_id in weights:
+            fold = Fold(
+                fold_id=fold_id,
+                weight=weights[fold_id],
+                region_count=region_counts[fold_id],
+                categories=self.categories
+            )
+            self.folds[fold_id] = fold
 
-        # Populate category_counts_grid
-        for cat in self.categories:
-            idx = self.category_to_index[cat]
-            self.category_counts_grid[:, :, idx] = counts[cat].T  # Transpose to match dimensions
+        # Compute total counts and total populated cells
+        self.total_populated_cells = np.count_nonzero(np.sum(self.category_counts_grid, axis=2))
 
-        # Total number of grid cells
-        self.total_cells = self.grid_size_x * self.grid_size_y
+        # Compute intended counts for folds
+        for fold in self.folds.values():
+            fold.compute_intended_counts(self.total_counts, self.total_populated_cells)
 
-        # Desired counts per area
-        self.num_areas = len(weights)
-        self.desired_category_counts_list = []
-        for area_id in range(1, self.num_areas + 1):
-            area_weight = weights[area_id - 1]
-            desired_category_counts = {cat: area_weight * self.total_category_counts[cat] for cat in self.categories}
-            # For last area, adjust desired counts to ensure total counts are correct
-            if area_id == self.num_areas:
-                for cat in self.categories:
-                    desired_category_counts[cat] = self.total_category_counts[cat] - sum(
-                        self.desired_category_counts_list[i][cat] for i in range(area_id - 1)
-                    )
-            self.desired_category_counts_list.append(desired_category_counts)
+        # Initialize regions within folds
+        self.region_id_to_region = {}
+        region_id = 1
+        for fold in self.folds.values():
+            for _ in range(fold.region_count):
+                region_weight = fold.weight / fold.region_count
+                region = Region(region_id=region_id, categories=self.categories, weight=region_weight)               
+                fold.add_region(region)
+                self.region_id_to_region[region_id] = region
+                region_id += 1
 
-        # Intended number of cells per area based on weights
-        self.intended_area_sizes = [weight * self.total_cells for weight in weights]
-
-        # Variables to keep track of the best assignment
         self.best_equality_score = float('inf')
         self.best_iteration = None
-        self.best_grid = None
-        self.best_area_category_counts = None
-        self.best_area_sizes = None
-        self.best_area_bounding_boxes = None
-        self.best_category_percentages = None
-
-        # List to store performance metrics per iteration
-        self.iteration_metrics = []
-
-        # Optionally store all iterations' data
-        self.all_iterations_data = []
-
+        self.best_configuration = None
+        self.logger = logging.getLogger(__name__)
+   
     def get_neighbors(self, i, j):
         neighbors = []
         if i > 0:
@@ -190,338 +593,372 @@ class GridSplitter:
             neighbors.append((i, j + 1))
         return neighbors
 
-    def compute_priority(self, cell, area_id, area_category_counts, area_size, area_bounding_box):
+    def assign_unallocated_cells(self, grid):
+        """
+        Assigns any unallocated cells to the nearest region based on counts and updates counts accordingly.
+        """
+        grid_size_y, grid_size_x = grid.shape
+        unallocated_cells = []
+
+        # Find unallocated cells
+        for i in range(grid_size_y):
+            for j in range(grid_size_x):
+                if grid[i, j] == 0:
+                    unallocated_cells.append((i, j))
+            
+        # For each unallocated cell, find the nearest allocated neighbor
+        for cell in unallocated_cells:
+            i, j = cell
+            neighbors = self.get_neighbors(i, j)
+            found = False
+            for n in neighbors:
+                ni, nj = n
+                if grid[ni, nj] != 0:
+                    region_id = grid[ni, nj]
+                    region = self.region_id_to_region[region_id]
+                    fold = region.fold
+                    # Assign the cell to this region
+                    grid[i, j] = region.region_id
+                    cell_counts = self.category_counts_grid[i, j, :]
+                    cell_total_counts = np.sum(cell_counts)
+                    counts = {
+                        'total': cell_total_counts,
+                        'cell': 1
+                    }
+                    for idx, cat in enumerate(self.categories):
+                        counts[cat] = cell_counts[idx]
+                    region.update_counts(counts)
+                    fold.update_counts(counts)
+                    # Update bounding box
+                    region.bounding_box['min_i'] = min(region.bounding_box['min_i'], i)
+                    region.bounding_box['max_i'] = max(region.bounding_box['max_i'], i)
+                    region.bounding_box['min_j'] = min(region.bounding_box['min_j'], j)
+                    region.bounding_box['max_j'] = max(region.bounding_box['max_j'], j)
+                    found = True
+                    break  # Stop after assigning to the first found neighbor
+            if not found:
+                # If no allocated neighbors, assign to the closest region
+                min_distance = float('inf')
+                closest_region = None
+                for region in self.region_id_to_region.values():
+                    bb = region.bounding_box
+                    if bb['min_i'] is not None and bb['min_j'] is not None:
+                        center_i = (bb['min_i'] + bb['max_i']) / 2
+                        center_j = (bb['min_j'] + bb['max_j']) / 2
+                        distance = (i - center_i) ** 2 + (j - center_j) ** 2
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_region = region
+                if closest_region is not None:
+                    grid[i, j] = closest_region.region_id
+                    fold = closest_region.fold
+                    cell_counts = self.category_counts_grid[i, j, :]
+                    cell_total_counts = np.sum(cell_counts)
+                    counts = {
+                        'total': cell_total_counts,
+                        'cell': 1
+                    }
+                    for idx, cat in enumerate(self.categories):
+                        counts[cat] = cell_counts[idx]
+                    closest_region.update_counts(counts)
+                    fold.update_counts(counts)
+                    # Update bounding box
+                    closest_region.bounding_box['min_i'] = min(closest_region.bounding_box['min_i'], i)
+                    closest_region.bounding_box['max_i'] = max(closest_region.bounding_box['max_i'], i)
+                    
+    def compute_equality_score(self):
+        total_penalty = 0
+        all_region_penalties = {}      
+
+        for region_id, region in self.region_id_to_region.items():
+            region_penalties = {}
+            
+            # First, determine a penalty from how much this category deviates from its intended
+            # cell area and its overall share of the count across all categories.
+            total_count_difference = abs(region.total_counts - region.intended_total_counts)
+            total_count_penalty = total_count_difference**0.85
+            region_penalties['total_count'] = total_count_penalty
+
+            # Now similar, but for overall region area.
+            size_diff = abs(region.cell_count - region.intended_cell_counts)
+            size_penalty = (size_diff / self.total_populated_cells) * 1e2  # Adjust the multiplier as needed
+            region_penalties['region_area'] = size_penalty
+            
+            # Now apply penalty terms based on underrepresented or missing categories
+            category_penalties = {}
+            for cat in self.categories:
+                total_count = self.total_category_counts[cat]
+                if total_count > 0:
+                    count = region.category_counts.get(cat, 0)
+                    percentage = (count / total_count) * 100
+                    deficit = region.weight * 100 - percentage       
+                    penalty = 0
+                    if deficit > 0:
+                        # Apply a scale factor to prioritise avoiding very low percentages
+                        scaling_factor = 1 / max(percentage, 1)
+                        penalty += deficit * 1e2 * scaling_factor                        
+                        # If below the minimum percentage threshold, apply increasingly harsh penalty scaling
+                        if percentage < self.min_percentage_threshold:
+                            below_threshold_deficit = self.min_percentage_threshold - percentage
+                            penalty = penalty ** below_threshold_deficit
+                        # Large penalty if the category is completely missing
+                        if percentage == 0:
+                            penalty += 1e6
+                            
+                    category_penalties[cat] = penalty
+            region_penalties['per-category'] = category_penalties
+
+            # Now a penalty term based on the region aspect ratio.
+            bb = region.bounding_box
+            width = bb['max_j'] - bb['min_j'] + 1
+            height = bb['max_i'] - bb['min_i'] + 1
+            aspect_ratio_penalty = 0
+            if width > 0 and height > 0:
+                aspect_ratio = max(width / height, height / width)
+                aspect_ratio_penalty = (aspect_ratio - 1) ** 2 * 1e3  # Adjust multiplier as needed
+            else:
+                aspect_ratio_penalty += 1e6  # Large penalty if width or height is zero
+            region_penalties['aspect_ratio'] = aspect_ratio_penalty
+
+            all_region_penalties[region_id] = region_penalties
+        
+        # Now sum all penalty terms
+        total_penalty = 0
+        for region_penalties in all_region_penalties.values():
+            total_penalty += region_penalties['total_count']
+            total_penalty += region_penalties['region_area']
+            for category_penalty in region_penalties['per-category'].values():
+                total_penalty += category_penalty
+            total_penalty += region_penalties['aspect_ratio']
+            
+        return total_penalty, all_region_penalties
+
+    def compute_priority(self, cell, region):
         i, j = cell
         cell_counts = self.category_counts_grid[i, j, :]
+        cell_total_counts = np.sum(cell_counts)
+    
+        # Start with zero priority
         priority = 0
-        # Compute area size deficit
-        area_size_deficit = self.intended_area_sizes[area_id - 1] - area_size
+    
+        # Calculate the deficit in region size
+        region_size_deficit = region.intended_cell_counts - region.cell_count
+    
+        # Adjust priority based on size deficit
+        if region_size_deficit > 0:
+            # Region is under its intended size; increase priority
+            size_incentive = region_size_deficit / region.intended_cell_counts
+            priority += size_incentive * self.size_incentive_multiplier
+        else:
+            # Region has reached or exceeded intended size; reduce priority
+            size_penalty = abs(region_size_deficit) / region.intended_cell_counts
+            priority -= size_penalty * self.size_penalty_multiplier
+    
+        # Category underrepresentation reinforcement (as before)
         for idx, cat in enumerate(self.categories):
             total_cat_count = self.total_category_counts[cat]
-            area_count = area_category_counts[cat]
-            desired_count = self.desired_category_counts_list[area_id - 1][cat]
-            cell_count = cell_counts[idx]
-            remaining = desired_count - area_count
-            if remaining > 0 and cell_count > 0:
+            region_cat_count = region.category_counts.get(cat, 0)
+            desired_cat_count = region.intended_total_counts * (self.total_category_counts[cat] / self.total_counts)
+            cell_cat_count = cell_counts[idx]
+    
+            remaining = desired_cat_count - region_cat_count
+            if remaining > 0 and cell_cat_count > 0:
                 # Compute the deficit percentage
-                area_percentage = (area_count / total_cat_count) * 100 if total_cat_count > 0 else 0
-                deficit = self.min_percentage_threshold - area_percentage
+                region_percentage = (region_cat_count / total_cat_count) * 100 if total_cat_count > 0 else 0
+                deficit = self.min_percentage_threshold - region_percentage
                 if deficit > 0:
                     # Increase priority if the category is underrepresented
-                    priority += cell_count * (deficit ** 2)  # Square to emphasize underrepresentation
+                    priority += cell_cat_count * (deficit ** 2)  # Square to emphasize underrepresentation
                 else:
-                    priority += cell_count
-        # Adjust priority based on area size
-        if area_size_deficit <= 0:
-            # Area has reached or exceeded intended size; reduce priority
-            priority -= abs(area_size_deficit) * 1000  # Penalize exceeding size
+                    priority += cell_cat_count
+    
+        # Penalize worsening aspect ratio (as before)
         # Compute new bounding box if the cell is added
-        min_i = min(area_bounding_box['min_i'], i)
-        max_i = max(area_bounding_box['max_i'], i)
-        min_j = min(area_bounding_box['min_j'], j)
-        max_j = max(area_bounding_box['max_j'], j)
+        min_i = min(region.bounding_box['min_i'], i) if region.bounding_box['min_i'] is not None else i
+        max_i = max(region.bounding_box['max_i'], i) if region.bounding_box['max_i'] is not None else i
+        min_j = min(region.bounding_box['min_j'], j) if region.bounding_box['min_j'] is not None else j
+        max_j = max(region.bounding_box['max_j'], j) if region.bounding_box['max_j'] is not None else j
+    
         width = max_j - min_j + 1
         height = max_i - min_i + 1
+    
         # Compute aspect ratio before and after adding the cell
-        old_width = area_bounding_box['max_j'] - area_bounding_box['min_j'] + 1
-        old_height = area_bounding_box['max_i'] - area_bounding_box['min_i'] + 1
+        old_width = region.bounding_box['max_j'] - region.bounding_box['min_j'] + 1 if region.bounding_box['max_j'] is not None else 1
+        old_height = region.bounding_box['max_i'] - region.bounding_box['min_i'] + 1 if region.bounding_box['max_i'] is not None else 1
+    
         old_aspect_ratio = max(old_width / old_height, old_height / old_width)
         new_aspect_ratio = max(width / height, height / width)
+    
         # Penalize if aspect ratio worsens
         if new_aspect_ratio > old_aspect_ratio:
             aspect_ratio_increase = new_aspect_ratio - old_aspect_ratio
-            priority -= aspect_ratio_increase * 1000  # Adjust multiplier as needed
-        # Negative priority because heapq is a min-heap and we want higher priority to be popped first
+            priority -= aspect_ratio_increase * self.aspect_ratio_penalty_multiplier  # Adjust multiplier as needed
+    
+        # Return negative priority because heapq is a min-heap
         return -priority
 
-    def assign_unallocated_cells(self, grid):
-        unallocated_cells = np.argwhere(grid == 0)
-        for cell in unallocated_cells:
-            i, j = cell
-            # Find neighboring cells that are allocated
-            neighbors = self.get_neighbors(i, j)
-            neighbor_areas = [grid[n] for n in neighbors if grid[n] > 0]
-            if neighbor_areas:
-                # Assign to the area with the most neighboring cells
-                area_id = max(set(neighbor_areas), key=neighbor_areas.count)
-                grid[i, j] = area_id
-            else:
-                # Assign to a random area
-                grid[i, j] = random.randint(1, self.num_areas)
-
-    def compute_equality_score(self, area_category_counts, area_sizes, area_bounding_boxes):
-        category_scores = []
-        penalty = 0
-        for cat in self.categories:
-            total_cat_count = self.total_category_counts[cat]
-            if total_cat_count > 0:
-                percentages = [
-                    (area_category_counts[area_id][cat] / total_cat_count) * 100
-                    for area_id in area_category_counts
-                ]
-                # Check for underrepresented categories
-                for p in percentages:
-                    if p < self.min_percentage_threshold:
-                        # Exponential penalty for underrepresentation
-                        deficit = self.min_percentage_threshold - p
-                        penalty += np.exp(deficit)
-                        if p == 0:
-                            penalty += 1e6  # Large penalty if category is missing
-                variance = np.var(percentages)
-                category_scores.append(variance)
-        # Penalty for deviation from intended area sizes
-        for area_size, intended_size in zip(area_sizes, self.intended_area_sizes):
-            size_diff = abs(area_size - intended_size)
-            size_penalty = (size_diff / self.total_cells) * 1e5  # Adjust the multiplier as needed
-            penalty += size_penalty
-        # Penalty for aspect ratios
-        for area_bb in area_bounding_boxes:
-            width = area_bb['max_j'] - area_bb['min_j'] + 1
-            height = area_bb['max_i'] - area_bb['min_i'] + 1
-            if width > 0 and height > 0:
-                aspect_ratio = max(width / height, height / width)
-                aspect_ratio_penalty = (aspect_ratio - 1) ** 2 * 1000  # Adjust multiplier as needed
-                penalty += aspect_ratio_penalty
-            else:
-                penalty += 1e6  # Large penalty if width or height is zero (shouldn't happen)
-        # The overall equality score is the mean variance across all categories plus penalties
-        equality_score = np.mean(category_scores) + penalty
-        return equality_score
-
-    def compute_category_percentages_with_uncertainties(self, area_category_counts):
-        category_percentages = {}
-        category_uncertainties = {}
-        for area_id in area_category_counts:
-            category_percentages[area_id] = {}
-            category_uncertainties[area_id] = {}
-            for cat in self.categories:
-                count = area_category_counts[area_id][cat]
-                total_cat_count = self.total_category_counts[cat]
-                if total_cat_count > 0:
-                    percentage = (count / total_cat_count) * 100
-                    # Compute binomial uncertainty
-                    p = count / total_cat_count
-                    n = total_cat_count
-                    std_error = np.sqrt(p * (1 - p) / n) * 100  # Convert to percentage
-                else:
-                    percentage = 0
-                    std_error = 0
-                category_percentages[area_id][cat] = percentage
-                category_uncertainties[area_id][cat] = std_error
-        return category_percentages, category_uncertainties
-
-    def run(self, random_seed=4125214):
-        random.seed(random_seed)
+    def run(self):
+        """
+        Runs the grid splitting algorithm across the specified number of iterations.
+        """
+        self.all_configurations = []
+        self.all_seeds = []
         for iteration in range(1, self.iterations + 1):
             self.logger.debug(f"Iteration {iteration}")
+    
+            # Initialize grid and data structures
+            self.grid = np.zeros((self.grid_size_y, self.grid_size_x), dtype=int)
+            grid = self.grid  # For convenience
 
-            # Initialize grid
-            grid = np.zeros((self.grid_size_y, self.grid_size_x), dtype=int)
-
-            # Randomly select seed cells for each area
-            seed_cells = []
+            # Initialize a dictionary to track cell addition order for each region
+            region_cell_order = {region.region_id: [] for fold in self.folds.values() for region in fold.regions}
+            global_order_counter = 1  # Global counter to assign order numbers
+            
+            # Reset regions and folds
+            for fold in self.folds.values():
+                fold.reset()
+    
+            # Create a list of all populated cells
+            populated_cells = [(i, j) for i in range(self.grid_size_y) for j in range(self.grid_size_x)
+                               if np.sum(self.category_counts_grid[i, j, :]) > 0]
+            if not populated_cells:
+                raise ValueError("No populated cells found in the grid.")
+    
+            # Shuffle the list for randomness
+            random.shuffle(populated_cells)
+    
+            # Assign seed cells to regions
             used_cells = set()
-            for area_id in range(1, self.num_areas + 1):
-                while True:
-                    i = random.randint(0, self.grid_size_y - 1)
-                    j = random.randint(0, self.grid_size_x - 1)
-                    if (i, j) not in used_cells:
-                        seed_cells.append((i, j))
-                        used_cells.add((i, j))
-                        break
+            cell_index = 0
+            for fold in self.folds.values():
+                for region in fold.regions:
+                    while cell_index < len(populated_cells):
+                        i, j = populated_cells[cell_index]
+                        cell_index += 1
+                        if (i, j) not in used_cells:
+                            seed_cell = (i, j)
+                            used_cells.add((i, j))
+                            # Assign cell to region
+                            grid[i, j] = region.region_id
+                            cell_counts = self.category_counts_grid[i, j, :]
+                            counts = {
+                                'total': np.sum(cell_counts),
+                                'cell': 1
+                            }
+                            for idx, cat in enumerate(self.categories):
+                                counts[cat] = cell_counts[idx]
+                            region.update_counts(counts)
+                            fold.update_counts(counts)
+                            # Update bounding box
+                            region.bounding_box['min_i'] = i
+                            region.bounding_box['max_i'] = i
+                            region.bounding_box['min_j'] = j
+                            region.bounding_box['max_j'] = j
+                            # Record the seed cell with order number
+                            region_cell_order[region.region_id].append(((i, j), global_order_counter, region.order_counter))
+                            global_order_counter += 1
+                            region.order_counter += 1
+                            break
+                    else:
+                        raise ValueError("Not enough populated cells to assign to all regions.")
+            self.all_seeds.append(tuple(used_cells))
 
-            # Initialize area data
-            area_category_counts_list = []
-            area_sizes = []
-            area_bounding_boxes = []
-            for area_id, seed in zip(range(1, self.num_areas + 1), seed_cells):
-                area_category_counts_list.append({cat: 0 for cat in self.categories})
-                area_sizes.append(0)
-                area_bounding_boxes.append({'min_i': seed[0], 'max_i': seed[0], 'min_j': seed[1], 'max_j': seed[1]})
-            assigned_cells = set()
-            queued_cells = set()
-
-            # Initialize combined priority queue
+            # Initialize priority queue and counter
             heap = []
-
-            # Add seed cells to the heap
-            for area_id, seed in zip(range(1, self.num_areas + 1), seed_cells):
-                if grid[seed] == 0:
-                    grid[seed] = area_id
-                    assigned_cells.add(seed)
-                    area_sizes[area_id - 1] += 1
-                    cell_counts = self.category_counts_grid[seed[0], seed[1], :]
-                    for idx, cat in enumerate(self.categories):
-                        area_category_counts_list[area_id - 1][cat] += cell_counts[idx]
-                    neighbors = self.get_neighbors(seed[0], seed[1])
+            counter = count()
+    
+            # Add neighbors of seed cells to the heap
+            for fold in self.folds.values():
+                for region in fold.regions:
+                    i = region.bounding_box['min_i']
+                    j = region.bounding_box['min_j']
+                    neighbors = self.get_neighbors(i, j)
                     for n in neighbors:
-                        if grid[n] == 0 and n not in queued_cells:
+                        ni, nj = n
+                        if grid[ni, nj] == 0:
                             priority = self.compute_priority(
-                                n,
-                                area_id,
-                                area_category_counts_list[area_id - 1],
-                                area_sizes[area_id - 1],
-                                area_bounding_boxes[area_id - 1]
+                                cell=(ni, nj),
+                                region=region
                             )
-                            heapq.heappush(heap, (priority, n, area_id))
-                            queued_cells.add(n)
-
-            # Grow areas simultaneously
+                            heapq.heappush(heap, (priority, next(counter), (ni, nj), region))
+    
+            # Grow regions
             while heap:
-                _, current_cell, area_id = heapq.heappop(heap)
-                if grid[current_cell] != 0:
+                _, _, (i, j), region = heapq.heappop(heap)
+                if grid[i, j] != 0:
                     continue  # Skip if already assigned
-                grid[current_cell] = area_id
-                assigned_cells.add(current_cell)
-                area_sizes[area_id - 1] += 1
-                cell_counts = self.category_counts_grid[current_cell[0], current_cell[1], :]
+                grid[i, j] = region.region_id
+                fold = region.fold
+                cell_counts = self.category_counts_grid[i, j, :]
+                counts = {
+                    'total': np.sum(cell_counts),
+                    'cell': 1
+                }
                 for idx, cat in enumerate(self.categories):
-                    area_category_counts_list[area_id - 1][cat] += cell_counts[idx]
-                # Update area bounding box
-                area_bb = area_bounding_boxes[area_id - 1]
-                area_bb['min_i'] = min(area_bb['min_i'], current_cell[0])
-                area_bb['max_i'] = max(area_bb['max_i'], current_cell[0])
-                area_bb['min_j'] = min(area_bb['min_j'], current_cell[1])
-                area_bb['max_j'] = max(area_bb['max_j'], current_cell[1])
+                    counts[cat] = cell_counts[idx]
+                region.update_counts(counts)
+                fold.update_counts(counts)
+                # Update bounding box
+                region.bounding_box['min_i'] = min(region.bounding_box['min_i'], i)
+                region.bounding_box['max_i'] = max(region.bounding_box['max_i'], i)
+                region.bounding_box['min_j'] = min(region.bounding_box['min_j'], j)
+                region.bounding_box['max_j'] = max(region.bounding_box['max_j'], j)
+                # Record the cell with order number
+                region_cell_order[region.region_id].append(((i, j), global_order_counter, region.order_counter))
+                global_order_counter += 1
+                region.order_counter += 1
                 # Add neighbors to the heap
-                neighbors = self.get_neighbors(current_cell[0], current_cell[1])
+                neighbors = self.get_neighbors(i, j)
                 for n in neighbors:
-                    if grid[n] == 0 and n not in queued_cells:
+                    ni, nj = n
+                    if grid[ni, nj] == 0:
                         priority = self.compute_priority(
-                            n,
-                            area_id,
-                            area_category_counts_list[area_id - 1],
-                            area_sizes[area_id - 1],
-                            area_bounding_boxes[area_id - 1]
+                            cell=(ni, nj),
+                            region=region
                         )
-                        heapq.heappush(heap, (priority, n, area_id))
-                        queued_cells.add(n)
-
-            # Assign any remaining unallocated cells
+                        heapq.heappush(heap, (priority, next(counter), (ni, nj), region))
+            
+            # Assign unallocated cells
             self.assign_unallocated_cells(grid)
-
-            # Recalculate area_category_counts and area_sizes
-            area_category_counts = {area_id: area_category_counts_list[area_id - 1] for area_id in range(1, self.num_areas + 1)}
-            area_sizes = [np.sum(grid == area_id) for area_id in range(1, self.num_areas + 1)]
-
-            # Compute equality score with area size and shape penalty
-            equality_score = self.compute_equality_score(
-                area_category_counts,
-                area_sizes,
-                area_bounding_boxes
+    
+            # Compute equality score
+            equality_score, equality_breakdown = self.compute_equality_score()
+    
+            # Create a FoldConfiguration instance for this iteration
+            configuration = FoldConfiguration(
+                iteration=iteration,
+                grid=grid.copy(),
+                folds=deepcopy(self.folds),
+                categories=self.categories,
+                total_category_counts=self.total_category_counts,
+                total_counts=self.total_counts,
+                total_populated_cells=self.total_populated_cells,
+                x_edges=self.x_edges,
+                y_edges=self.y_edges,
+                region_cell_order=deepcopy(region_cell_order),
             )
-
-            # Compute category percentages and uncertainties
-            category_percentages, category_uncertainties = self.compute_category_percentages_with_uncertainties(area_category_counts)
-
-            # Save metrics for this iteration
-            iteration_data = {
-                'iteration': iteration,
-                'equality_score': equality_score,
-                'grid': grid.copy(),
-                'area_category_counts': {k: v.copy() for k, v in area_category_counts.items()},
-                'area_sizes': area_sizes.copy(),
-                'area_bounding_boxes': [bb.copy() for bb in area_bounding_boxes],
-                'category_percentages': {k: v.copy() for k, v in category_percentages.items()},
-                'category_uncertainties': {k: v.copy() for k, v in category_uncertainties.items()}
-            }
-            self.iteration_metrics.append(iteration_data)
-            self.all_iterations_data.append(iteration_data)
-
-            # Update best assignment if current one is better
+            configuration.equality_score = equality_score
+            configuration.equality_breakdown = equality_breakdown
+            
+            self.all_configurations.append(configuration)
+            
+            # Keep track of the best configuration
             if equality_score < self.best_equality_score:
                 self.best_equality_score = equality_score
                 self.best_iteration = iteration
-                self.best_grid = grid.copy()
-                self.best_area_category_counts = {k: v.copy() for k, v in area_category_counts.items()}
-                self.best_area_sizes = area_sizes.copy()
-                self.best_area_bounding_boxes = [bb.copy() for bb in area_bounding_boxes]
-                self.best_category_percentages = {k: v.copy() for k, v in category_percentages.items()}
-                self.best_category_uncertainties = {k: v.copy() for k, v in category_uncertainties.items()}
+                self.best_configuration = configuration
                 self.logger.info(f"New best equality score: {equality_score:.4f} at iteration {iteration}")
-
-            # Log counts and percentages per area at DEBUG level
-            if self.verbose:
-                log_msg = f"Iteration {iteration} Equality Score: {equality_score:.4f}\n"
-                log_msg += "Category counts and percentages per area:\n"
-                for area_id in range(1, self.num_areas + 1):
-                    log_msg += f"Area {area_id}:\n"
-                    total_area_counts = sum(area_category_counts[area_id][cat] for cat in self.categories)
-                    area_size = area_sizes[area_id - 1]
-                    intended_size = self.intended_area_sizes[area_id - 1]
-                    size_percentage = (area_size / self.total_cells) * 100
-                    intended_percentage = (intended_size / self.total_cells) * 100
-                    log_msg += f"  Area size: {area_size} cells ({size_percentage:.2f}% of total, intended {intended_percentage:.2f}%)\n"
-                    for cat in self.categories:
-                        count = area_category_counts[area_id][cat]
-                        total_cat_count = self.total_category_counts[cat]
-                        percentage = category_percentages[area_id][cat]
-                        uncertainty = category_uncertainties[area_id][cat]
-                        log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% ± {uncertainty:.2f}% of total {cat})\n"
-                    log_msg += f"  Total points in area: {int(total_area_counts)}\n"
-                self.logger.debug(log_msg)
-
-        # After iterations, use the best assignment
-        self.grid = self.best_grid
-        self.area_category_counts = self.best_area_category_counts
-        self.area_sizes = self.best_area_sizes
-        self.area_bounding_boxes = self.best_area_bounding_boxes
-        self.category_percentages = self.best_category_percentages
-        self.category_uncertainties = self.best_category_uncertainties
-
-        self.logger.info(f"\nBest equality score after {self.iterations} iterations: {self.best_equality_score:.4f}")
-        self.logger.info(f"Best iteration: {self.best_iteration}")
-
-        # Log the final counts and percentages
-        log_msg = "\nFinal category counts and percentages per area:\n"
-        for area_id in range(1, self.num_areas + 1):
-            log_msg += f"\nArea {area_id}:\n"
-            total_area_counts = sum(self.area_category_counts[area_id][cat] for cat in self.categories)
-            area_size = self.area_sizes[area_id - 1]
-            intended_size = self.intended_area_sizes[area_id - 1]
-            size_percentage = (area_size / self.total_cells) * 100
-            intended_percentage = (intended_size / self.total_cells) * 100
-            log_msg += f"  Area size: {area_size} cells ({size_percentage:.2f}% of total, intended {intended_percentage:.2f}%)\n"
-            for cat in self.categories:
-                count = self.area_category_counts[area_id][cat]
-                total_cat_count = self.total_category_counts[cat]
-                percentage = self.category_percentages[area_id][cat]
-                uncertainty = self.category_uncertainties[area_id][cat]
-                log_msg += f"  {cat}: {int(count)} points ({percentage:.2f}% ± {uncertainty:.2f}% of total {cat})\n"
-            log_msg += f"  Total points in area: {int(total_area_counts)}\n"
-        self.logger.info(log_msg)
-
-    def plot(self):
-        # Plotting the grid and the sub-areas
-        fig, ax = plt.subplots()
-        ax.set_xlim(self.x_edges[0], self.x_edges[-1])
-        ax.set_ylim(self.y_edges[0], self.y_edges[-1])
-        ax.set_aspect('equal')
-
-        cell_widths = self.x_edges[1:] - self.x_edges[:-1]  # Length: grid_size_x
-        cell_heights = self.y_edges[1:] - self.y_edges[:-1]  # Length: grid_size_y
-
-        # For plotting, we need to know the x and y positions of the grid cells
-        x_positions = self.x_edges[:-1]  # Length: grid_size_x
-        y_positions = self.y_edges[:-1]  # Length: grid_size_y
-
-        for i in range(self.grid_size_y):      # i from 0 to grid_size_y - 1
-            for j in range(self.grid_size_x):  # j from 0 to grid_size_x - 1
-                area_id = self.grid[i, j]
-                if area_id > 0:
-                    x = x_positions[j]
-                    y = y_positions[i]
-                    width = cell_widths[j]
-                    height = cell_heights[i]
-                    ax.add_patch(plt.Rectangle((x, y), width, height, facecolor=f'C{area_id}',
-                                               edgecolor='black', linewidth=0.5))
-
-        plt.title('Contiguous Sub-Areas with Balanced Category Representation and Compact Shapes')
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        plt.show()
+        
+        # Figure out number of unique seed cell configs used
+        self.unique_seeds = set(self.all_seeds)
+        self.logger.info(f'Number of unique seed cell configurations = {len(self.unique_seeds)}')
+        
+        # After all iterations, use the best configuration
+        self.grid = self.best_configuration.grid
+        self.folds = self.best_configuration.folds
 
 
+################################################################################################################
 def maximal_rectangle(matrix):
     if not matrix.any():
         return None
@@ -579,9 +1016,9 @@ def find_rectangles_by_maximal_rectangle(binary_grid):
         grid[min_row:max_row+1, min_col:max_col+1] = 0
     return rectangles
 
-def plot_fold_rectangles(binary_grid, rectangles, fold_id):
+def plot_fold_rectangles(binary_grid, rectangles, title):
     rows, cols = binary_grid.shape
-    fig, ax = plt.subplots(figsize=(3, 3))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(binary_grid, cmap='gray', origin='upper')
     # Plot rectangles
     for rect in rectangles:
@@ -596,76 +1033,111 @@ def plot_fold_rectangles(binary_grid, rectangles, fold_id):
             linewidth=1
         )
         ax.add_patch(rect_patch)
-    ax.set_title(f'Fold {fold_id} with Rectangles')
+    ax.set_title(title)
     ax.set_xlabel('Column Index')
     ax.set_ylabel('Row Index')
     plt.gca().invert_yaxis()
     plt.show()
 
-def process_folds(best_grid):
-    fold_ids = np.unique(best_grid)
-    fold_ids = fold_ids[fold_ids != 0]  # Exclude 0 if present
-    fold_rectangles = {}
-    for fold_id in fold_ids:
-        print(f"Processing Fold {fold_id}")
-        binary_grid = (best_grid == fold_id).astype(int)
-        rectangles = find_rectangles_by_maximal_rectangle(binary_grid)
-        fold_rectangles[fold_id] = rectangles
-        total_perimeter = sum(2 * ((rect['max_row'] - rect['min_row'] + 1) + (rect['max_col'] - rect['min_col'] + 1))
-                              for rect in rectangles)
-        print(f"Fold {fold_id} has {len(rectangles)} rectangles with total perimeter {total_perimeter}.")
-        plot_fold_rectangles(binary_grid, rectangles, fold_id)
-    return fold_rectangles
+# def process_folds(best_grid):
+#     fold_ids = np.unique(best_grid)
+#     fold_ids = fold_ids[fold_ids != 0]  # Exclude 0 if present
+#     fold_rectangles = {}
+#     for fold_id in fold_ids:
+#         print(f"Processing Fold {fold_id}")
+#         binary_grid = (best_grid == fold_id).astype(int)
+#         rectangles = find_rectangles_by_maximal_rectangle(binary_grid)
+#         fold_rectangles[fold_id] = rectangles
+#         total_perimeter = sum(2 * ((rect['max_row'] - rect['min_row'] + 1) + (rect['max_col'] - rect['min_col'] + 1))
+#                               for rect in rectangles)
+#         print(f"Fold {fold_id} has {len(rectangles)} rectangles with total perimeter {total_perimeter}.")
+#         plot_fold_rectangles(binary_grid, rectangles, fold_id)
+#     return fold_rectangles
 
-color_names = [
-    "red", "green", "blue", "purple", "cyan", "orange", "yellow",
-    "pink", "gold", "teal", "lightblue", "darkblue", "lightgreen", "crimson",
-    "coral", "limegreen", "peru", "magenta"
-]
+# color_names = [
+#     "red", "green", "blue", "purple", "cyan", "orange", "yellow",
+#     "pink", "gold", "teal", "lightblue", "darkblue", "lightgreen", "crimson",
+#     "coral", "limegreen", "peru", "magenta"
+# ]
 
 
-# Cycle through colors to handle arbitrary fold IDs
-def get_color_for_fold(fold_id):
+# def get_color_for_fold(fold_id):
+#     """
+#     Returns a PyVista Color for a given fold ID, cycling through predefined colors.
+#     """
+#     color_cycle = itertools.cycle(color_names)  # Cycle through color list
+#     for _ in range(fold_id):
+#         color = next(color_cycle)
+#     return pv.Color(color)
+
+
+def plot_mesh_folds(fold_meshes, backend="static", cmap='turbo'):
     """
-    Returns a PyVista Color for a given fold ID, cycling through predefined colors.
-    """
-    color_cycle = itertools.cycle(color_names)  # Cycle through color list
-    for _ in range(fold_id):
-        color = next(color_cycle)
-    return pv.Color(color)
-
-
-# Function to plot the mesh folds using either 'trame' or 'static' backends
-def plot_mesh_folds(fold_meshes, backend="static"):
-    """
-    Plots the given mesh folds with the option to use the 'trame' or 'static' PyVista backend.
+    Plots the given mesh folds with unique colors assigned via a colormap.
+    All regions within the same fold share the same color. Labels and legends are removed to reduce complexity.
 
     Args:
         fold_meshes (dict): Dictionary of meshes by fold.
+            - If combine_subregions=True:
+                {fold_id: {category: cropped_mesh, ...}, ...}
+            - If combine_subregions=False:
+                {fold_id: {region_id: {category: cropped_mesh, ...}, ...}, ...}
         backend (str): The backend to use for plotting. Either 'trame' or 'static'.
     """
+    # Set the PyVista backend
     if backend == 'trame':
         pv.set_jupyter_backend('trame')
-        disable_trame_logger()
-        notebook = True
+        disable_trame_logger()  # Ensure this function is defined elsewhere in your code
     else:
         pv.set_jupyter_backend('static')
-        notebook = True
 
-    p = pv.Plotter() #notebook=notebook)
-    
-    for fold_id, category_meshes in fold_meshes.items():
-        color = get_color_for_fold(fold_id)
-        for category, mesh in category_meshes.items():
-            p.add_mesh(mesh, color=color, show_edges=True, opacity=0.55)
-    
-    # Show axes and grid
+    p = pv.Plotter()
+
+    # Collect unique fold_ids
+    fold_ids = list(fold_meshes.keys())
+    num_folds = len(fold_ids)
+
+    if num_folds == 0:
+        logging.warning("No meshes to plot.")
+        return
+
+    # Create a colormap with enough distinct colors
+    cmap = plt.get_cmap(cmap, num_folds*2)  # 'tab20' provides 20 distinct colors
+
+    # Generate color mapping: fold_id -> color
+    color_mapping = {}
+    for idx, fold_id in enumerate(fold_ids):
+        color = cmap(idx % cmap.N)[:3]  # Extract RGB, ignore alpha
+        color_mapping[fold_id] = color
+
+    # Plot each mesh with its assigned color
+    for fold_id, data in fold_meshes.items():
+        color = color_mapping.get(fold_id, (1.0, 1.0, 1.0))  # Default to white if not found
+
+        if isinstance(data, dict):
+            # Determine if data contains categories or regions
+            first_inner_value = next(iter(data.values()), None)
+            if isinstance(first_inner_value, pv.PolyData):
+                # Combined subregions: {category: mesh, ...}
+                for category, mesh in data.items():
+                    p.add_mesh(mesh, color=color, show_edges=True, opacity=0.55)
+            elif isinstance(first_inner_value, dict):
+                # Separate subregions: {region_id: {category: mesh, ...}, ...}
+                for region_id, categories_dict in data.items():
+                    for category, mesh in categories_dict.items():
+                        p.add_mesh(mesh, color=color, show_edges=True, opacity=0.55)
+            else:
+                logging.error(f"Unexpected data format for fold {fold_id}: {data}")
+        else:
+            logging.error(f"Unexpected data format for fold {fold_id}: {data}")
+
+    # Show axes and grid for reference
     p.show_axes_all()
     p.show_grid(font_size=14)
     if backend == 'static':
         p.window_size = [1200, 800]
 
-    # Show the plot
+    # Render the plot without labels or legends
     p.show(title="Fold Meshes")
 
 
@@ -686,101 +1158,235 @@ def map_grid_to_spatial(min_col, max_col, min_row, max_row, x_edges, y_edges):
     ymax = y_edges[max_row + 1]  # +1 because y_edges has length grid_size_y + 1
     return xmin, xmax, ymin, ymax
 
-def crop_meshes_per_fold(category_meshes, fold_rectangles, x_edges, y_edges):
+
+def crop_meshes_per_fold(category_meshes, fold_rectangles_info, x_edges, y_edges):
     """
-    Crop meshes for each fold based on rectangular bounding boxes using sequential plane clipping.
+    Crop meshes for each fold or subregion based on rectangular bounding boxes using sequential plane clipping.
 
     Parameters:
         category_meshes (dict): Dictionary of category names and corresponding PyVista meshes.
-        fold_rectangles (dict): Dictionary of fold IDs and bounding boxes.
+        fold_rectangles_info (dict): Dictionary containing:
+            - 'combine_subregions': bool
+            - 'fold_rectangles': dict
         x_edges (array-like): Bin edges for x-axis.
         y_edges (array-like): Bin edges for y-axis.
 
     Returns:
-        dict: A dictionary containing cropped meshes for each fold and category.
+        dict: A dictionary containing cropped meshes.
+              - If combine_subregions=True:
+                  {fold_id: {category: cropped_mesh, ...}, ...}
+              - If combine_subregions=False:
+                  {fold_id: {region_id: {category: cropped_mesh, ...}, ...}, ...}
     """
+    combine_subregions = fold_rectangles_info.get('combine_subregions', True)
+    fold_rectangles = fold_rectangles_info.get('fold_rectangles', {})
     fold_meshes = {}
-    for fold_id, rectangles in fold_rectangles.items():
-        logging.info(f"Processing Fold {fold_id}")
-        
-        # For each category, we'll create a list to store cropped meshes
-        fold_category_meshes = {}
-        
-        for category, mesh in category_meshes.items():
-            mesh = pv.wrap(mesh)  # Ensure the mesh is a PyVista object
-            
-            # Initialize an empty list to collect cropped meshes for this category and fold
-            cropped_meshes = []
-            
-            for rect in rectangles:
-                # Map grid indices to spatial coordinates
-                xmin, xmax, ymin, ymax = map_grid_to_spatial(
-                    rect['min_col'], rect['max_col'], rect['min_row'], rect['max_row'], x_edges, y_edges)
-                
-                # Create planes for clipping
-                planes = [
-                    ('x', xmin, False),  # Left plane
-                    ('x', xmax, True),   # Right plane
-                    ('y', ymin, False),  # Bottom plane
-                    ('y', ymax, True),   # Top plane
-                ]
-                
-                # Start with the original mesh and sequentially clip with each plane
-                clipped_mesh = mesh
-                for axis, origin, invert in planes:
-                    normal = {'x': (1, 0, 0), 'y': (0, 1, 0)}[axis]
-                    point = [origin, 0, 0] if axis == 'x' else [0, origin, 0]
-                    clipped_mesh = clipped_mesh.clip(normal=normal, origin=point, invert=invert)
-                    if clipped_mesh.n_points == 0:
-                        break  # No points left, exit early
-                if clipped_mesh.n_points > 0:
-                    cropped_meshes.append(clipped_mesh)
+
+    for fold_id, rectangles_or_subregions in fold_rectangles.items():
+        if combine_subregions:
+            rectangles = rectangles_or_subregions  # List of rectangles for the entire fold
+            logging.info(f"Processing Fold {fold_id} with combined subregions")
+            fold_category_meshes = {}
+
+            for category, mesh in category_meshes.items():
+                mesh = pv.wrap(mesh)  # Ensure the mesh is a PyVista object
+
+                cropped_meshes = []
+                for rect in rectangles:
+                    # Validate rectangle structure
+                    if not isinstance(rect, dict):
+                        logging.error(f"Invalid rectangle format in Fold {fold_id}: {rect}")
+                        continue
+
+                    # Extract spatial coordinates
+                    try:
+                        xmin, xmax, ymin, ymax = map_grid_to_spatial(
+                            rect['min_col'], rect['max_col'], rect['min_row'], rect['max_row'], x_edges, y_edges)
+                    except KeyError as e:
+                        logging.error(f"Missing key in rectangle {rect}: {e}")
+                        continue
+
+                    # Define clipping planes
+                    planes = [
+                        ('x', xmin, False),  # Left
+                        ('x', xmax, True),   # Right
+                        ('y', ymin, False),  # Bottom
+                        ('y', ymax, True),   # Top
+                    ]
+
+                    clipped_mesh = deepcopy(mesh)  # Start with a fresh copy
+                    for axis, origin, invert in planes:
+                        normal = {'x': (1, 0, 0), 'y': (0, 1, 0)}[axis]
+                        point = [origin, 0, 0] if axis == 'x' else [0, origin, 0]
+                        try:
+                            clipped_mesh = clipped_mesh.clip(normal=normal, origin=point, invert=invert)
+                        except Exception as e:
+                            logging.error(f"Clipping error for Fold {fold_id}, Category '{category}', Rectangle {rect}: {e}")
+                            clipped_mesh = pv.PolyData()  # Empty mesh
+
+                        if clipped_mesh.n_points == 0:
+                            break  # Exit early if no points remain
+                    if clipped_mesh.n_points > 0:
+                        cropped_meshes.append(clipped_mesh)
+                    else:
+                        logging.debug(f"Empty mesh after clipping rectangle {rect} for category '{category}' in Fold {fold_id}")
+
+                if cropped_meshes:
+                    # Merge all cropped meshes for this category within the fold
+                    combined_mesh = cropped_meshes[0]
+                    for cm in cropped_meshes[1:]:
+                        try:
+                            combined_mesh = combined_mesh.merge(cm, merge_points=True, main_has_priority=False)
+                        except Exception as e:
+                            logging.error(f"Merging error for Fold {fold_id}, Category '{category}': {e}")
+                    fold_category_meshes[category] = combined_mesh
                 else:
-                    logging.debug(f"Cropping resulted in empty mesh for rectangle {rect} in category {category}")
-                
-            # Merge the cropped meshes for this category and fold
-            if cropped_meshes:
-                combined_mesh = cropped_meshes[0]
-                for cm in cropped_meshes[1:]:
-                    combined_mesh = combined_mesh.merge(cm, merge_points=True, main_has_priority=False)
-                fold_category_meshes[category] = combined_mesh
-            else:
-                logging.warning(f"No mesh data in Fold {fold_id} for category {category}")
-        
-        # Store the combined meshes per fold
-        fold_meshes[fold_id] = fold_category_meshes
+                    logging.warning(f"No meshes found for category '{category}' in Fold {fold_id}")
+
+            fold_meshes[fold_id] = fold_category_meshes
+        else:
+            # Process each subregion separately
+            fold_meshes[fold_id] = {}
+            for region_id, rectangles in rectangles_or_subregions.items():
+                logging.info(f"Processing Region {region_id} in Fold {fold_id}")
+                fold_meshes[fold_id][region_id] = {}
+
+                for category, mesh in category_meshes.items():
+                    mesh = pv.wrap(mesh)  # Ensure the mesh is a PyVista object
+
+                    cropped_meshes = []
+                    for rect in rectangles:
+                        # Validate rectangle structure
+                        if not isinstance(rect, dict):
+                            logging.error(f"Invalid rectangle format in Fold {fold_id}, Region {region_id}: {rect}")
+                            continue
+
+                        # Extract spatial coordinates
+                        try:
+                            xmin, xmax, ymin, ymax = map_grid_to_spatial(
+                                rect['min_col'], rect['max_col'], rect['min_row'], rect['max_row'], x_edges, y_edges)
+                        except KeyError as e:
+                            logging.error(f"Missing key in rectangle {rect}: {e}")
+                            continue
+
+                        # Define clipping planes
+                        planes = [
+                            ('x', xmin, False),  # Left
+                            ('x', xmax, True),   # Right
+                            ('y', ymin, False),  # Bottom
+                            ('y', ymax, True),   # Top
+                        ]
+
+                        clipped_mesh = deepcopy(mesh)  # Start with a fresh copy
+                        for axis, origin, invert in planes:
+                            normal = {'x': (1, 0, 0), 'y': (0, 1, 0)}[axis]
+                            point = [origin, 0, 0] if axis == 'x' else [0, origin, 0]
+                            try:
+                                clipped_mesh = clipped_mesh.clip(normal=normal, origin=point, invert=invert)
+                            except Exception as e:
+                                logging.error(f"Clipping error for Fold {fold_id}, Region {region_id}, Category '{category}', Rectangle {rect}: {e}")
+                                clipped_mesh = pv.PolyData()  # Empty mesh
+
+                            if clipped_mesh.n_points == 0:
+                                break  # Exit early if no points remain
+                        if clipped_mesh.n_points > 0:
+                            cropped_meshes.append(clipped_mesh)
+                        else:
+                            logging.debug(f"Empty mesh after clipping rectangle {rect} for category '{category}' in Region {region_id}, Fold {fold_id}")
+
+                    if cropped_meshes:
+                        # Merge all cropped meshes for this category within the subregion
+                        combined_mesh = cropped_meshes[0]
+                        for cm in cropped_meshes[1:]:
+                            try:
+                                combined_mesh = combined_mesh.merge(cm, merge_points=True, main_has_priority=False)
+                            except Exception as e:
+                                logging.error(f"Merging error for Fold {fold_id}, Region {region_id}, Category '{category}': {e}")
+                        fold_meshes[fold_id][region_id][category] = combined_mesh
+                    else:
+                        logging.warning(f"No meshes found for category '{category}' in Region {region_id}, Fold {fold_id}")
 
     return fold_meshes
 
 
-def save_splits(dh, splits):
+def save_fold_meshes(dh, splits, fold_to_split=None):
     """
-    Merge cells for each fold-category permutation and save them to disk.
+    Save meshes for each fold and its subregions into corresponding split directories with sceneID tags.
 
     Args:
-        dh (DataHandler): An object with a split_dirs attribute, containing directories for 'train', 'test', 'eval'.
-        splits (dict): A dictionary containing fold-category mappings of meshes. 
-    Returns:
-        None: The function saves the merged meshes directly to disk.
-    """
-    dh._ensure_split_dirs()
-    # Iterate over the splits dictionary (e.g., 'train', 'test', 'eval')
-    for fold, categories in splits.items():
-        # Get the appropriate directory for the fold from DataHandler
-        fold_dir = dh.split_dirs.get(fold)
-        cell_counter = 0
-        # Iterate over each category in the fold
-        for category, mesh in categories.items():
-            if mesh.n_points == 0 and combined_mesh.n_cells == 0:
-                logger.warn(f"Fold: {fold}, Category: {category} has an empty mesh!")
-            mesh.GetPointData().SetActiveNormals('Normals')
+        dh (DataHandler): 
+            An object with a `split_dirs` attribute, which is a dictionary mapping split names 
+            (e.g., 'train', 'test', 'eval') to their respective directories (as Path objects).
+        splits (dict): 
+            A dictionary containing fold-region-category mappings of meshes.
+            Format:
+            {
+                fold_id: {
+                    region_id: {
+                        category: PolyData, 
+                        ...
+                    },
+                    ...
+                },
+                ...
+            }
+        fold_to_split (dict, optional): 
+            A dictionary mapping fold IDs to split names.
+            Example: {1: 'train', 2: 'test', 3: 'eval'}
+            If not provided, defaults to {1: 'train', 2: 'test', 3: 'eval'}.
 
-            output_file = fold_dir / f"{category.lower()}.ply"           
-            # Save the merged mesh to disk using vtk for control over color storage
-            writer = vtk.vtkPLYWriter()
-            writer.SetFileName(output_file.as_posix())
-            writer.SetInputData(mesh)
-            writer.SetColorModeToDefault()  # Ensure colors are written from the Scalars
-            writer.SetArrayName('RGB')
-            writer.Write()
-            logger.info(f"Fold {fold}, category {category} saved.")
+    Returns:
+        None: 
+            The function saves the merged meshes directly to disk.
+    """
+    if fold_to_split is None:
+        fold_to_split = {1: 'train', 2: 'test', 3: 'eval'}
+
+    # Ensure that all split directories exist
+    dh._ensure_split_dirs()
+
+    for fold_id, regions in splits.items():
+        # Map fold_id to split name using the provided mapping
+        split_name = fold_to_split.get(fold_id)
+        if not split_name:
+            logging.warning(f"Fold ID {fold_id} not found in `fold_to_split` mapping. Skipping this fold.")
+            continue
+
+        # Retrieve the directory for the current split
+        split_dir = dh.split_dirs.get(split_name)
+        if not split_dir:
+            logging.warning(f"Split directory for '{split_name}' not found in DataHandler. Skipping this split.")
+            continue
+
+        # Ensure that split_dir is a Path object
+        if not isinstance(split_dir, Path):
+            logging.error(f"Split directory for '{split_name}' is not a Path object. Please check DataHandler.")
+            continue
+
+        # Iterate over each region within the current fold
+        for region_id, categories in regions.items():
+            # Iterate over each category within the current region
+            for category, mesh in categories.items():
+                # Check if the mesh is empty
+                if mesh.n_points == 0 and mesh.n_cells == 0:
+                    logging.warning(f"Fold: {fold_id}, Region: {region_id}, Category: '{category}' has an empty mesh. Skipping.")
+                    continue
+
+                # Optionally set active normals if they exist
+                normals = mesh.GetPointData().GetNormals()
+                if normals:
+                    mesh.GetPointData().SetActiveNormals('Normals')
+
+                # Define the output filename with sceneID tag
+                output_filename = f"{category.lower()}_sceneid{region_id}.ply"
+                output_file = split_dir / output_filename
+
+                # Initialize the PLY writer
+                writer = vtk.vtkPLYWriter()
+                writer.SetFileName(str(output_file))
+                writer.SetInputData(mesh)
+                writer.SetColorModeToDefault()  # Ensure colors are written from Scalars
+                writer.SetArrayName('RGB')
+                writer.Write()
+
+                logging.info(f"Saved Fold {fold_id}, Region {region_id}, Category '{category}' to {output_file}.")

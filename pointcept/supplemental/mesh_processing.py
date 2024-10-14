@@ -5,6 +5,7 @@ import re
 import psutil
 import os
 import gc
+from collections import defaultdict
 
 import vtk
 import laspy
@@ -373,75 +374,186 @@ class DataHandler:
             logger.info(f"Label {self.label} does not currently have extracted meshes. Attempting now.")
             self.create_meshes()
         self.load_extracted_meshes_vtk()
-    
-    
 
-    def save_splits(self, split_dict):
-        """
-        Func to save any splits as .ply mesh files in train/test/eval dirs.
-        """
-        self._ensure_split_dirs()
+    # def save_splits(self, split_dict):
+    #     """
+    #     Func to save any splits as .ply mesh files in train/test/eval dirs.
+    #     """
+    #     self._ensure_split_dirs()
 
-        combined_dict = combine_category_meshes(split_dict)
-        for split in combined_dict:
-            save_dir = self.split_dirs[split]
-            logger.info(f"saving {split} files to {save_dir}")
-            for category, mesh in combined_dict[split].items():
-                p = save_dir / f"{category}.ply"
-                o3d.io.write_triangle_mesh(p.as_posix(), mesh)
+    #     combined_dict = combine_category_meshes(split_dict)
+    #     for split in combined_dict:
+    #         save_dir = self.split_dirs[split]
+    #         logger.info(f"saving {split} files to {save_dir}")
+    #         for category, mesh in combined_dict[split].items():
+    #             p = save_dir / f"{category}.ply"
+    #             o3d.io.write_triangle_mesh(p.as_posix(), mesh)
 
-    def generate_and_save_fold_clouds(self, resolution, poisson_radius, output_format='.las', save_all_formats=False):
+    def generate_and_save_fold_clouds(
+        self,
+        resolution,
+        poisson_radius,
+        output_format='.las',
+        save_all_formats=False
+    ):
         """
-        Generates points from the fold meshes and saves them in the specified format.
-        If save_all_formats=True, it saves both .las and .pth formats.
+        Generates point clouds from fold meshes, saves individual point clouds with sceneid tags,
+        and combines them into single files per sceneid.
+
+        Args:
+            resolution (float): Sampling resolution parameter.
+            poisson_radius (float): Poisson sampling radius.
+            output_format (str): The format to save point clouds. Defaults to '.las'.
+            save_all_formats (bool): If True, saves in both .las and .pth formats. Defaults to False.
+
+        Raises:
+            ValueError: If an unsupported output_format is provided.
         """
+        import logging
+        import shutil
+        from collections import defaultdict
+        import re
+
+        # Define valid formats
         valid_formats = ['.las', '.pth']
         if output_format not in valid_formats:
-            raise ValueError(f"extension {output_format} not supported. Valid formats: {valid_formats}")
+            raise ValueError(f"Extension '{output_format}' not supported. Valid formats: {valid_formats}")
 
+        # Define resolution and label roots
         resolution_root = self.clouds_root / f"res{resolution}_pr{poisson_radius}"
         label_root = resolution_root / self.label
-        
+
         # Scrub the label_root directory (remove it if it exists and recreate it)
         if label_root.exists():
             shutil.rmtree(label_root)
+            logging.info(f"Removed existing directory: {label_root}")
 
-        split_cloud_dirs = {
+        # Define fold_cloud_dirs as 'train', 'test', 'eval'
+        fold_cloud_dirs = {
             'train': label_root / "train",
             'test': label_root / "test",
             'eval': label_root / "eval"
         }
-        # resolution_root.mkdir(parents=True, exist_ok=True)
-        for path in [resolution_root, label_root] + list(split_cloud_dirs.values()):
+
+        # Create all necessary directories
+        for path in [resolution_root, label_root] + list(fold_cloud_dirs.values()):
             path.mkdir(parents=True, exist_ok=True)
+            logging.info(f"Created directory: {path}")
 
-        for fold, output_dir in split_cloud_dirs.items():
-            mesh_dir = self.split_dirs[fold]
-            for in_f in mesh_dir.glob('*.ply'):
+        # Iterate over each fold
+        for fold_name, output_dir in fold_cloud_dirs.items():
+            mesh_dir = self.split_dirs.get(fold_name)
+            if not mesh_dir or not mesh_dir.exists():
+                logging.warning(f"No mesh directory found for fold '{fold_name}'. Expected at: {mesh_dir}. Skipping.")
+                continue
 
-                gt_value = int(in_f.stem.split('_')[0])
-                sampler = MeshSampler(mesh_path=in_f, gt_value=gt_value)
-                sampler.generate_cloud(resolution=resolution, poisson_radius=poisson_radius)
+            logging.info(f"Processing fold '{fold_name}'.")
 
-                # Save in the specified output format
-                if output_format == '.las' or save_all_formats:
-                    las_output_name = output_dir / f"{in_f.stem}.las"
-                    sampler.save(las_output_name)
+            # Dictionary to group meshes by sceneid
+            scene_mesh_files = defaultdict(list)
 
-                if output_format == '.pth' or save_all_formats:
-                    pth_output_name = output_dir / f"{in_f.stem}.pth"
-                    sampler.save(pth_output_name)
+            # Iterate over mesh files and group them by sceneid
+            for mesh_file in mesh_dir.glob('*.ply'):
+                logging.debug(f"Processing mesh file: {mesh_file}")
+                # Extract sceneid from filename using regex (expects 'sceneid<xxx>' in filename)
+                match = re.search(r'sceneid(\d+)', mesh_file.stem, re.IGNORECASE)
+                if not match:
+                    logging.warning(f"Filename '{mesh_file.name}' does not contain 'sceneid'. Skipping.")
+                    continue
+                scene_id = match.group(1)
+                scene_mesh_files[scene_id].append(mesh_file)
 
-            # Also generate a combined file for the fold in the requested format(s)
-            if output_format == '.las' or save_all_formats:
-                las_in_files = list(output_dir.glob('*.las'))
-                combined_las_name = output_dir / "combined.las"
-                combine_las_files(input_paths=las_in_files, output_path=combined_las_name)
+            logging.info(f"Found {len(scene_mesh_files)} unique sceneids in fold '{fold_name}'.")
 
-            if output_format == '.pth' or save_all_formats:
-                pth_in_files = list(output_dir.glob('*.pth'))
-                combined_pth_name = output_dir / "combined.pth"
-                combine_pth_files(label=f"{self.label}_{fold}", input_paths=pth_in_files, output_path=combined_pth_name)
+            # Process each sceneid within the current fold
+            for scene_id, mesh_files in scene_mesh_files.items():
+                logging.info(f"Processing sceneid {scene_id} with {len(mesh_files)} mesh files.")
+
+                # Lists to collect output file paths for combining
+                las_files = []
+                pth_files = []
+
+                # Process each mesh file within the sceneid
+                for mesh_file in mesh_files:
+                    # Extract category from filename (assuming format '{category}_sceneidXXX.ply')
+                    # For example, '1_WALL_sceneid1.ply' -> category '1_WALL'
+                    parts = mesh_file.stem.split('_sceneid')
+                    if len(parts) != 2:
+                        logging.warning(f"Filename '{mesh_file.name}' does not follow expected pattern '{{category}}_sceneid{{xxx}}.ply'. Skipping.")
+                        continue
+                    category_part = parts[0]
+
+                    # Extract gt_value assuming category starts with a number, e.g., '1_WALL'
+                    try:
+                        gt_value = int(category_part.split('_')[0])
+                    except ValueError:
+                        logging.warning(f"Cannot extract gt_value from category '{category_part}' in file '{mesh_file.name}'. Skipping.")
+                        continue
+
+                    # Initialize MeshSampler
+                    sampler = MeshSampler(mesh_path=mesh_file, gt_value=gt_value)
+                    sampler.generate_cloud(resolution=resolution, poisson_radius=poisson_radius)
+
+                    # Save individual point cloud in specified format(s)
+                    if output_format == '.las' or save_all_formats:
+                        las_output_name = output_dir / f"{category_part}_sceneid{scene_id}.las"
+                        sampler.save(las_output_name)
+                        las_files.append(las_output_name)
+                        logging.info(f"Saved LAS point cloud: {las_output_name}")
+
+                    if output_format == '.pth' or save_all_formats:
+                        # Update label to include label, fold_name, and sceneid
+                        pth_label = f"{self.label}_{fold_name}_{scene_id}"
+                        pth_output_name = output_dir / f"{category_part}_sceneid{scene_id}.pth"
+                        sampler.save(pth_output_name)
+                        pth_files.append(pth_output_name)
+                        logging.info(f"Saved PTH point cloud: {pth_output_name}")
+
+                # Combine LAS files for the current sceneid
+                if (output_format == '.las' or save_all_formats) and las_files:
+                    combined_las_name = output_dir / f"combined_{self.label}_{fold_name}_sceneid{scene_id}.las"
+                    try:
+                        combine_las_files(input_paths=las_files, output_path=combined_las_name)
+                        logging.info(f"Saved combined LAS point cloud for sceneid {scene_id}: {combined_las_name}")
+                    except Exception as e:
+                        logging.error(f"Failed to combine LAS files for sceneid {scene_id}: {e}")
+
+                # Combine PTH files for the current sceneid
+                if (output_format == '.pth' or save_all_formats) and pth_files:
+                    combined_pth_name = output_dir / f"combined_{self.label}_{fold_name}_sceneid{scene_id}.pth"
+                    try:
+                        combine_pth_files(label=f"{self.label}_{fold_name}_{scene_id}", input_paths=pth_files, output_path=combined_pth_name)
+                        logging.info(f"Saved combined PTH point cloud for sceneid {scene_id}: {combined_pth_name}")
+                    except Exception as e:
+                        logging.error(f"Failed to combine PTH files for sceneid {scene_id}: {e}")
+
+        logging.info("All folds and sceneids have been processed and saved.")
+
+    def plot_meshes(self):
+        pv.set_jupyter_backend('static')
+        p = pv.Plotter()
+        for mesh in self.extracted_meshes.values():
+            p.add_mesh(mesh, opacity=0.75, rgb=True)
+        p.show_axes_all()
+        p.show_grid(font_size=14)
+
+        bounds = p.renderer.bounds  # Returns (xmin, xmax, ymin, ymax, zmin, zmax)
+        center_x = (bounds[0] + bounds[1]) / 2
+        center_y = (bounds[2] + bounds[3]) / 2
+        center_z = (bounds[4] + bounds[5]) / 2
+
+        # Determine an appropriate camera distance based on scene size
+        # This ensures the entire scene is visible from above
+        scene_extent = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+        camera_distance = scene_extent * 2.2  # Adjust multiplier as needed
+        # Set the camera position directly above the center, along the +z axis
+        camera_position = [center_x, center_y, bounds[5] + camera_distance]
+        # Define the focal point (where the camera is looking at)
+        focal_point = [center_x, center_y, center_z]
+        # Define the view up vector to maintain the y-axis as "up"
+        view_up = [0, 1, 0]
+        p.camera_position = [camera_position, focal_point, view_up]
+        p.show()
 
 
 #################################################################################
