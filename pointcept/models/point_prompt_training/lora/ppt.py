@@ -255,17 +255,11 @@ class PointPromptTrainingLoRA(nn.Module):
             self.model = expand_ppt_model_conditions(self.model, self.new_conditions, self.condition_mapping)
         # insert LoRA adapters to model
         minlora.add_lora(self.model, lora_config=self.lora_config)
-        # print('*'*100)
-        # if hasattr(self.model, 'lora_dropout_mask'):
-        #     print("I HAVE A LORA MASK")
-        # else:
-        #     print("I HAVE NO LORA MASK")
         # track parameters
         lora_trainable_params = count_trainable_parameters(self.model)
         logger.info(f"{lora_trainable_params} params after LoRA")
 
     def forward(self, *args, **kwargs):
-        # print(f"Calling forward of model {self.model}")
         return self.model.forward(*args, **kwargs)
 
 
