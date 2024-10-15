@@ -73,15 +73,15 @@ model = dict(
 optimizer=dict(
     type="AdamW",
     weight_decay=0.1,
-    lr=0.003,
+    lr=0.002,
     betas=(0.9, 0.999)
 )
 
 # scheduler settings
 scheduler = dict(
     type="OneCycleLR",
-    max_lr=0.005,
-    pct_start=0.1,
+    max_lr=0.003,
+    pct_start=0.03,
     anneal_strategy="cos",
     div_factor=10.0,
     final_div_factor=1000.0,
