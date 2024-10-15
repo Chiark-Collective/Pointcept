@@ -740,17 +740,17 @@ class MeshAnalyser:
             'y_edges': y_edges,
         }
 
-    # def generate_library_splits(self, cell_width=3.0, weights=(0.65, 0.2, 0.15), random_seed=9039501):
-    #     """
-    #     Function to generate splits with a special algorithm for the library dataset.
-    #     """
-    #     category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
-    #     # transformed_category_cells = transform_cells(category_cells)
-    #     logger.info("Cell division complete, now assigning to folds and transforming...")
-    #     splits = split_all_categories(category_cells, weights=weights)
-    #     process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
-    #     logger.info("Fold allocation complete!")
-    #     return splits
+    def generate_library_splits(self, cell_width=3.0, weights=(0.65, 0.2, 0.15), random_seed=9039501):
+        """
+        Function to generate splits with a special algorithm for the library dataset.
+        """
+        category_cells = divide_all_categories_into_cells_pyvista(self.meshes, cell_width)
+        # transformed_category_cells = transform_cells(category_cells)
+        logger.info("Cell division complete, now assigning to folds and transforming...")
+        splits = split_all_categories(category_cells, weights=weights)
+        process_splits_pyvista(splits, cell_width=cell_width, seed=random_seed)
+        logger.info("Fold allocation complete!")
+        return splits
 
 
 #################################################################################

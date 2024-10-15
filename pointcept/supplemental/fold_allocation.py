@@ -19,6 +19,7 @@ from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
 from matplotlib.collections import PatchCollection
 from matplotlib import cm
+from pathlib import Path
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')

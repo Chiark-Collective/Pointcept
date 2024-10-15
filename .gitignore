@@ -16,7 +16,7 @@ outputs/
 .cache
 result
 _poetry.lock
-notebooks/.ipynb_checkpoints
+**/.ipynb_checkpoints
 notebooks/*.pth
 notebooks/output_voxels
 wheels_container

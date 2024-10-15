@@ -39,6 +39,7 @@ def merge_and_save_cells(dh, splits):
     """
     dh._ensure_split_dirs()
     # Iterate over the splits dictionary (e.g., 'train', 'test', 'eval')
+    fold_counter = 1
     for fold, categories in splits.items():
         # Get the appropriate directory for the fold from DataHandler
         fold_dir = dh.split_dirs.get(fold)
@@ -56,9 +57,10 @@ def merge_and_save_cells(dh, splits):
 
             if combined_mesh.n_points == 0 and combined_mesh.n_cells == 0:
                 logger.warn(f"Fold: {fold}, Category: {category} has an empty combined mesh!")
+                continue
             combined_mesh.GetPointData().SetActiveNormals('Normals')
 
-            output_file = fold_dir / f"{category.lower()}.ply"           
+            output_file = fold_dir / f"{category.lower()}_sceneid{fold_counter}.ply"
             # Save the merged mesh to disk using vtk for control over color storage
             writer = vtk.vtkPLYWriter()
             writer.SetFileName(output_file.as_posix())
@@ -67,6 +69,7 @@ def merge_and_save_cells(dh, splits):
             writer.SetArrayName('RGB')
             writer.Write()
         logger.info(f"For fold {fold}, merged {cell_counter} cells in total.")
+        fold_counter += 1
 
 
 def process_splits_pyvista(splits, cell_width, seed=None):
