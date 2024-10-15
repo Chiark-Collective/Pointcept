@@ -99,24 +99,46 @@ data = dict(
       data_root=my_data_root,  # Optional, will use default if not specified
       glob_pattern="combined*.pth",
       transform=[
-          dict(type='CenterShift', apply_z=True),
-        #   dict(type='RandomJitter', sigma=0.003, clip=0.01),
-          dict(type='ChromaticJitter', p=0.95, std=0.05),
-        #   dict(type='ElasticDistortion', distortion_params=[[0.1, 0.2], [0.2, 0.5]]),
-          dict(type='RandomFlip', p=0.5),
-          dict(
-              type='GridSample',
-              grid_size=grid_size,
-              hash_type='fnv',
-              mode='train',
-              return_grid_coord=True
-          ),
-          dict(type='SphereCrop', point_max=sphere_point_max, mode='random'),
-          dict(type='CenterShift', apply_z=False),
-          dict(type='NormalizeColor'),
-          dict(type='ShufflePoint'),
-          dict(type='ToTensor'),
-          dict(type='Collect', keys=('coord', 'grid_coord', 'segment', 'condition'), feat_keys=('color', 'normal'))
+            dict(type='CenterShift', apply_z=True),
+            #   dict(type='RandomJitter', sigma=0.003, clip=0.01),
+            #   dict(type='ElasticDistortion', distortion_params=[[0.1, 0.2], [0.2, 0.5]]),
+            dict(
+                type='RandomRotate',
+                angle=[-1, 1],
+                axis='z',
+                center=[0, 0, 0],
+                p=0.5),
+            dict(
+                type='RandomRotate',
+                angle=[-0.015625, 0.015625],
+                axis='x',
+                p=0.5),
+            dict(
+                type='RandomRotate',
+                angle=[-0.015625, 0.015625],
+                axis='y',
+                p=0.5),
+            dict(type='RandomScale', scale=[0.9, 1.1]),
+            dict(type='RandomFlip', p=0.5),
+            dict(type='RandomJitter', sigma=0.005, clip=0.02),
+            dict(
+                type='ElasticDistortion',
+                distortion_params=[[0.2, 0.4], [0.8, 1.6]]),
+
+            dict(type='ChromaticJitter', p=0.95, std=0.05),
+            dict(
+                type='GridSample',
+                grid_size=grid_size,
+                hash_type='fnv',
+                mode='train',
+                return_grid_coord=True
+            ),
+            dict(type='SphereCrop', point_max=sphere_point_max, mode='random'),
+            dict(type='CenterShift', apply_z=False),
+            dict(type='NormalizeColor'),
+            dict(type='ShufflePoint'),
+            dict(type='ToTensor'),
+            dict(type='Collect', keys=('coord', 'grid_coord', 'segment', 'condition'), feat_keys=('color', 'normal'))
         ],
       test_mode=False,
       loop=20  # Adjust if needed
