@@ -275,10 +275,11 @@ class PointPromptTraining(nn.Module):
         # print(f"{logit_scale=} {sim=}")
         seg_logits = logit_scale * sim
         # print(f"Segment key says: {data_dict['segment']}")
+        # if 'segment' in data_dict:
+        #     data_dict['segment'] = data_dict['segment'] - 1
         if 'segment' in data_dict:
-            data_dict['segment'] = data_dict['segment'] - 1
-        # print("Label max:", data_dict['segment'].max())
-        # print("Label min:", data_dict['segment'].min())
+            print("Label max:", data_dict['segment'].max())
+            print("Label min:", data_dict['segment'].min())
 
 
         # Compute loss or return logits based on mode

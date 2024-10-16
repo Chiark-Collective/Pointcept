@@ -195,9 +195,7 @@ class SemSegTester(TesterBase):
                             input_dict[key] = input_dict[key].cuda(non_blocking=True)
                     idx_part = input_dict["index"]
                     with torch.no_grad():
-                        # print(f"{self.model=}")
                         pred_part = self.model(input_dict)["seg_logits"]
-                        # print(f'{self.model(input_dict)["seg_logits"].shape}=')  # (n, k)
                         # raise ValueError
                         pred_part = F.softmax(pred_part, -1)
                         if self.cfg.empty_cache:
@@ -206,7 +204,6 @@ class SemSegTester(TesterBase):
                         for be in input_dict["offset"]:
                             pred[idx_part[bs:be], :] += pred_part[bs:be]
                             bs = be
-
                     logger.info(
                         "Test: {}/{}-{data_name}, Batch: {batch_idx}/{batch_num}".format(
                             idx + 1,
@@ -217,13 +214,18 @@ class SemSegTester(TesterBase):
                         )
                     )
                 pred = pred.max(1)[1].data.cpu().numpy()
+                # FUDGEY FUDGE
+                pred = pred + segment.min(axis=0)
                 np.save(pred_save_path, pred)
             if "origin_segment" in data_dict.keys():
                 assert "inverse" in data_dict.keys()
                 pred = pred[data_dict["inverse"]]
                 segment = data_dict["origin_segment"]
             intersection, union, target = intersection_and_union(
-                pred, segment, self.cfg.data.num_classes, self.cfg.data.ignore_index
+                pred,
+                segment,
+                self.cfg.data.num_classes,
+                self.cfg.data.ignore_index
             )
             intersection_meter.update(intersection)
             union_meter.update(union)

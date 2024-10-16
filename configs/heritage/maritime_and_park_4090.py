@@ -11,7 +11,7 @@ hooks = [
     dict(type="InformationWriter"),
     dict(type="SemSegEvaluator"),
     dict(type="CheckpointSaver", save_freq=None),
-    # dict(type="PreciseEvaluator", test_last=False),
+    dict(type="PreciseEvaluator", test_last=False),
 ]
 
 # path settings
@@ -33,7 +33,8 @@ sphere_point_max = 220000
 # copied from base config
 resume = True
 evaluate = True
-test_only = False
+# test_only = False
+test_only = True
 seed = 44350923
 sync_bn = True
 
