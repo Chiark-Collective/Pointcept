@@ -215,8 +215,12 @@ class SemSegTester(TesterBase):
                     )
                 pred = pred.max(1)[1].data.cpu().numpy()
                 # FUDGEY FUDGE
-                pred = pred + segment.min(axis=0)
-                np.save(pred_save_path, pred)
+                # print(pred)
+                # print(segment)
+                # # pred = pred + segment.min(axis=0)
+                # # print(pred)
+                # # print(segment)
+                np.save(pred_save_path, pred + 1)
             if "origin_segment" in data_dict.keys():
                 assert "inverse" in data_dict.keys()
                 pred = pred[data_dict["inverse"]]

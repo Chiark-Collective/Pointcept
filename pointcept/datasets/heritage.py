@@ -166,6 +166,8 @@ class LibraryDataset(Dataset):
     def prepare_train_data(self, idx):
         # load data
         data_dict = self.get_data(idx)
+        if 'segment' in data_dict:
+            data_dict['segment'] = data_dict['segment'] - 1
         data_dict = self.transform(data_dict)
         # print(f"prepare_train_data returning data dict after transform with keys {data_dict.keys()}")
         return data_dict
@@ -175,7 +177,7 @@ class LibraryDataset(Dataset):
         data_dict = self.get_data(idx)
         # print("in prepare_test_data")
         # print(f"{data_dict=}")
-        segment = data_dict.pop("segment")
+        segment = data_dict.pop("segment") - 1
         data_dict = self.transform(data_dict)
         data_dict_list = []
         for aug in self.aug_transform:
