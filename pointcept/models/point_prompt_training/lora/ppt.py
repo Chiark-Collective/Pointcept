@@ -248,10 +248,10 @@ class PointPromptTrainingLoRA(nn.Module):
         strict: bool = True,
         assign: bool = False
     ):
-        print("*" * 88)
-        print(list(state_dict.keys())[:10])
-        print("*" * 88)
-        prefix = 'model'
+        # print("*" * 88)
+        # print(list(state_dict.keys())[:10])
+        # print("*" * 88)
+        prefix = 'model.'
         n_clip = len(prefix)
         adapted_dict = {k[n_clip:]: v for k, v in state_dict.items()
                         if k.startswith(prefix)}
