@@ -454,7 +454,7 @@ def create_las_with_results(scenes_dir, results_dir, output_dir=None):
         ds = ds.assign_coords(classes=xr.DataArray(np.array(classes), dims=["classes"]))
         ds["pred"] =(("point",), pred)
         ds["color"] = ds["color"].astype(np.uint8)
-        ds["gt"] = ds["gt"] + 1
+        ds["gt"] = ds["gt"]
         df = pd.concat(
             [
                 ds["coord"].to_pandas(),
