@@ -16,7 +16,7 @@ hooks = [
 
 # path settings
 my_data_root = "data/rog_and_foundry/"
-weight = 'exp/heritage/rog_and_foundry_v1/model/model_last.pth'
+weight = 'exp/heritage/rog_and_foundry_v2/model/model_last.pth'
 
 # misc custom setting
 epoch = 2500
