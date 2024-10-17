@@ -242,6 +242,21 @@ class PointPromptTrainingLoRA(nn.Module):
     def _load_base_model(self):
         self.model = load_base_model(self.base_model_config, device=self.device) 
 
+    def load_state_dict(
+        self,
+        state_dict: ty.Mapping[str, ty.Any],
+        strict: bool = True,
+        assign: bool = False
+    ):
+        print("*" * 88)
+        print(list(state_dict.keys())[:10])
+        print("*" * 88)
+        prefix = 'model'
+        n_clip = len(prefix)
+        adapted_dict = {k[n_clip:]: v for k, v in state_dict.items()
+                        if k.startswith(prefix)}
+        return self.model.load_state_dict(adapted_dict, strict, assign)
+
     def _inject_trainable_parameters(self):
         assert self.model is not None
         # track parameters 
