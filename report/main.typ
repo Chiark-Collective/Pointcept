@@ -80,6 +80,66 @@ PTv3 is designed to scale efficiently while maintaining strong performance, maki
 
 This document details an adaptation of an existing Point Transformer v3 (PTv3) model, originally trained on the ScanNet @dai2017scannet, Structured3D @zheng2019structured3d, and S3DIS @armeni2016s3dis datasets, to incorporate a low-rank adaptation using synthetic Heritage Building Information Modeling (HBIM) data.
 
+= Low-Rank Adaptation (LoRA)
+
+Low-rank Adaptation (LoRA) is a modern method for fine-tuning neural networks on new data. By introducing so-called adapter weights throughout a pretrained network and training these while leaving the original network intact, it occupies a middle ground between the traditional approach of training a new classification head on top of the original network and full fine-tuning of all network parameters @hu2021lora. LoRA and its variants have seen near-universal adoption as the go-to fine-tuning method across the fields of image generation and language modelling in recent times. This is largely owing to its strong performance on downstream tasks: for a given task and training dataset, LoRA models often lag only a few percent behind full fine-tuning while training only a small fraction of the parameters @hu2021lora. The ability to control the trainable parameter count through both the rank hyperparameter $r$ and the layers to which LoRA adapters are applied make it intrinsically flexible, usable in both data and compute constrained environments.
+
+= Core Mechanism
+
+LoRA achieves its efficiency by decomposing the weight updates into low-rank matrices. Specifically, for a given layer with weight matrix $W$, LoRA introduces two matrices $A$ and $B$, such that the effective weight becomes $W + A B^T$. The dimensions of $A$ and $B$ are chosen to ensure that their product has the same shape as $W$, while their inner dimension $r$ (the rank) is typically much smaller than the original dimensions @hu2021lora. This low-rank structure significantly reduces the number of trainable parameters while still allowing for meaningful updates to the network's behavior.
+
+The mathematical formulation of LoRA can be expressed as:
+
+$ h = W x + (alpha / r) A B^T x $
+
+Where $h$ is the layer output, $x$ is the input, $W$ is the original weight matrix, $A B^T$ represents the LoRA update, $alpha$ is a scaling factor, and $r$ is the rank @hu2021lora.
+
+Where traditional fine-tuning allocates new parameters to learning a new linear classifier on top of fixed latent representations, the generic formulation of LoRA weight update matrices permits that they be inserted anywhere in a network, including within specialised layers. This ability to adapt the internal representations themselves, as in full fine-tuning, lends it its expressive power as a domain adaptation technique.
+
+= Key Parameters and Considerations
+
+== Alpha Parameter
+
+The alpha ($alpha$) parameter in LoRA is a scaling factor that controls the magnitude of the LoRA update. It allows for finer control over the contribution of the LoRA update relative to the original weights. A larger alpha increases the impact of the adaptation, while a smaller alpha reduces it @hu2021lora.
+
+== Rank Selection
+
+The choice of rank $r$ is a key hyperparameter in LoRA:
+
+1. Low rank (e.g., $r = 1, 2, 4$):
+   - Suitable for minor adaptations or when computational resources are severely constrained.
+   - Ideal when the target task is closely related to the pre-training domain.
+
+2. High rank (e.g., $r = 16, 32, 64$):
+   - Appropriate for significant domain shifts or complex adaptation tasks.
+   - Provides more expressiveness, potentially approaching full fine-tuning performance.
+
+The optimal rank often depends on the specific task, dataset size, and base model architecture. Empirical studies have shown that performance often saturates at relatively low ranks (e.g., $r = 16$ or $32$) for many tasks @hu2021lora.
+
+= Application in Complex Network Architectures
+
+LoRA can be applied to various types of layers in complex neural network architectures. Within the framework of the PTv3 + PPT architecture, we specifically target:
+
+1. Transformer Blocks:
+   - Query (Q), key (K), and value (V) projection matrices in self-attention layers.
+   - The output projection matrix of the self-attention layer.
+   - Up-projection and down-projection matrices in feed-forward networks (FFN) @hu2021lora.
+
+2. Sparse 3D convolutional layers:
+   - For 3D convolutions, the 5D weight tensor is reshaped into a 2D matrix before applying LoRA.
+
+3. Embedding Layers:
+   - Applied to token embeddings and CLIP embedding adapters in the PPT point-text cross-encoder.
+
+= Advantages and Recent Developments
+
+One of the key advantages of LoRA is its modularity. Multiple LoRA adapters can be trained independently on different tasks or datasets and then combined or switched dynamically at inference time. This property enables efficient multi-task learning and domain adaptation without the need for storing multiple copies of the full model @hu2021lora.
+
+Recent research has explored variations of LoRA, such as QLoRA (Quantized LoRA), which further reduces memory requirements by using quantization techniques @dettmers2023qlora, and AdaLoRA, which adaptively adjusts the rank during training @zhang2023adalora. These developments continue to push the boundaries of efficient fine-tuning, making it possible to adapt large language models and diffusion models on consumer-grade hardware.
+
+= Conclusion
+
+LoRA represents a significant advancement in the field of transfer learning, offering a compelling balance between performance, efficiency, and flexibility. Its widespread adoption in both academic and industrial settings underscores its importance in the current landscape of deep learning research and applications @hu2021lora.
 
 = Conclusion
 
