@@ -52,7 +52,11 @@
 #v(15pt) 
 
 // Document body
-#show: rest => columns(2, rest)
+// #show: rest => columns(2, rest)
+// 
+// 
+#set page(columns: 2) //, height: 150pt)
+
 #outline(
   title: none,
   depth:2,
@@ -145,7 +149,7 @@ VTK is widely used in research and industry for creating high-quality visualizat
 This allows for fold construction (the process of creating distinct training and testing datasets) to be simplified, and for the point cloud generation to be fully automated compared.
 This represents a significant improvement in flexibility and automation compared to the previous CloudCompare @cloudcompare approach, which involved significant manual data manipulation.
 
-== Sites
+== Real Sites
 HBIM site data was used for a number of heritage buildings in the adjoining UNESCO World Heritage Site of Greenwich Maritime in Greenwich, London:
 - the National Maritime Museum
 - Park Row (an adjunct building of the above housing parking facilities)
@@ -155,11 +159,40 @@ The Royal Observatory was split into two sites, the northern site containing Fla
 Additionally, site data from the Brass Foundry, a National Heritage List for England (NHLE) listed building at the Royal Arsenal site also in Greenwich, was used.
 
 For each site, surrounding landscaping was included in the samples to capture key environmental and spatial contexts around the structures, including courtyards, pathways, and open spaces.
+#set page(columns: 1)
+#figure(
+  image("figs/meshes_brass_foundry.png", width: 100%),
+  caption: [Mesh data for the Brass Foundry site.],
+  outlined: true,
+)
+#figure(
+  image("figs/meshes_park_row.png", width: 100%),
+  caption: [Mesh data for the Park Row site.],
+  outlined: true,
+)
+#figure(
+  image("figs/meshes_maritime_museum.png", width: 100%),
+  caption: [Mesh data for the Maritime Museum site.],
+  outlined: true,
+)
+#figure(
+  image("figs/meshes_rog_north.png", width: 100%),
+  caption: [Mesh data for the Royal Observatory Greenwich North site.],
+  outlined: true,
+)
+#figure(
+  image("figs/meshes_rog_south.png", width: 100%),
+  caption: [Mesh data for the Royal Observatory Greenwich South site.],
+  outlined: true,
+)
+#set page(columns: 2)
+== HBIM Library Data
 
 = Fold Allocation
 Training, evaluation, and testing datasets serve distinct purposes in the model development pipeline. The training fold is used to train the model, the evaluation fold is periodically run during training to monitor performance and prevent over-fitting on the training sample, and the testing fold is reserved for assessing the final model's performance on unseen data, providing a true measure of its generalization ability.
 
 Constructing training, testing, and evaluation folds for semantic segmentation tasks requires careful consideration to ensure that each fold contains a representative distribution of the different categories present in the dataset. In the case of 3D point clouds, this is particularly challenging, as it is essential that the folds not only balance the number of points from each category but also capture spatially meaningful scenes. Manually constructing these folds is extremely difficult and time-consuming due to the complexity and scale of the data, as well as the need to preserve both category balance and spatial contiguity.
+This also ensures that regardless of the sampling resolution of the resulting point clouds, the samples remain distinct and mutually exclusive.
 
 == Automated site partitioning
 To address this, an automated fold allocation algorithm was developed to create well-balanced regions with the required overall share of each site, creating spatially contiguous regions for which each category in the taxonomy is well-represented.
@@ -175,6 +208,9 @@ Next, the data is voxelized into 6m x 6m bins, and the process of creating folds
 The configuration with the best equality score is selected, and this schematic is used to crop the input meshes into distinct training, evaluation, and testing folds, maintaining both spatial contiguity and meaningful category representation throughout the dataset.
 
 == Allocations
+
+=== Park Row
+
 
 
 = Experiments and Results
