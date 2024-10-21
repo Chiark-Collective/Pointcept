@@ -188,8 +188,9 @@ For each site, surrounding landscaping was included in the samples to capture ke
 
 #pagebreak()
 == HBIM Library Data
+A library of different HBIM components for our taxonomy, featuring various architectural elements in multiple forms, sizes, and colors, was utilized to augment the training dataset. This highly synthetic data allowed for an investigation into whether the inclusion of diverse building elements would enhance the model's ability to generalize to real-world heritage sites for semantic segmentation. By incorporating these well-structured components, the model's performance on actual site data could be evaluated more systematically.
 
-A library of HBIM features corresponding to our taxonomy was also utilised.
+A concern raised in this approach is that stripping the building elements of their surrounding spatial context - such as neighboring structures or environmental details - could negatively impact segmentation performance. Without this contextual information, the model may find it challenging to accurately segment scenes where spatial relationships between elements play a crucial role. This investigation examined whether the synthetic data, while beneficial for certain architectural details, could introduce limitations due to the absence of full scene context.
 
 #figure(
   image("figs/library_raw.png", width: 95%),
@@ -224,7 +225,7 @@ Each region denotes its seed cell with a red star.
 Each cell within each region is colour-graded to show the order it was added to the fold, from darkest to lightest.
 Each cell also contains a box denoting the global order in which the cell was allocated. 
 
-Renders for these fold allocations are shown in @maritime_folds_3d and @rog_south_fold_schematic
+Renders for these fold allocations are shown in @maritime_folds_3d and @rog_south_folds_3d.
 The corresponding per-category population breakdown across fold and subregion for these two examples are also summarised in @maritime_category_table and @rog_south_category_table.
 
 
@@ -340,7 +341,23 @@ placement: auto,
 ) <rog_south_category_table>
 
 #pagebreak()
+== Library Data Scene Construcion
+An issue with the raw library data is that each category of HBIM components is physically separated, often by considerable distances.
+This results in an over-clustering of objects within the same category, causing the network to potentially overfit by learning to group proximate objects too strongly in the classification.
+Additionally, the isolation of each sample means that the network's receptive field would predominantly encounter only one category at a time, which can lead to significant issues with stability and convergence during training, as the model lacks exposure to diverse category interactions within the same scene.
 
+To mitigate this, the library component meshes were divided into small 2.5m² cells, which were then randomly sorted per category. From this set, 15% of the cells were allocated to the evaluation sample, 20% to the testing sample, and 65% to the training sample. To further ensure variability, each sample was randomly shuffled, and the cells were recombined in a spiral pattern to construct more compact and diverse scenes.
+The resulting training set is shown in @library_scene.
+
+#figure(
+  image("figs/library_scene.jpg", width: 110%),
+  caption: [The recombined library scene for the training fold.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <library_scene>
+
+#pagebreak()
 = Experiments and Results
 TODO 
 
