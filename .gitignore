@@ -21,4 +21,4 @@ notebooks/*.pth
 notebooks/output_voxels
 wheels_container
 .env
-
+**.pdf
