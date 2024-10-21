@@ -55,7 +55,7 @@
 // #show: rest => columns(2, rest)
 // 
 // 
-#set page(columns: 2) //, height: 150pt)
+// #set page(columns: 2) //, height: 150pt)
 
 #outline(
   title: none,
@@ -159,7 +159,7 @@ The Royal Observatory was split into two sites, the northern site containing Fla
 Additionally, site data from the Brass Foundry, a National Heritage List for England (NHLE) listed building at the Royal Arsenal site also in Greenwich, was used.
 
 For each site, surrounding landscaping was included in the samples to capture key environmental and spatial contexts around the structures, including courtyards, pathways, and open spaces.
-#set page(columns: 1)
+// #set page(columns: 1)
 #figure(
   image("figs/meshes_brass_foundry.png", width: 100%),
   caption: [Mesh data for the Brass Foundry site.],
@@ -185,8 +185,19 @@ For each site, surrounding landscaping was included in the samples to capture ke
   caption: [Mesh data for the Royal Observatory Greenwich South site.],
   outlined: true,
 )
-#set page(columns: 2)
+
+#pagebreak()
 == HBIM Library Data
+
+A library of HBIM features corresponding to our taxonomy was also utilised.
+
+#figure(
+  image("figs/library_raw.png", width: 95%),
+  caption: [A subsection of the Library mesh data, showing a selection of stairs and railings.],
+  outlined: true,
+  placement: auto,
+  gap:1em,
+) <library_raw>
 
 = Fold Allocation
 Training, evaluation, and testing datasets serve distinct purposes in the model development pipeline. The training fold is used to train the model, the evaluation fold is periodically run during training to monitor performance and prevent over-fitting on the training sample, and the testing fold is reserved for assessing the final model's performance on unseen data, providing a true measure of its generalization ability.
@@ -207,13 +218,131 @@ Next, the data is voxelized into 6m x 6m bins, and the process of creating folds
 
 The configuration with the best equality score is selected, and this schematic is used to crop the input meshes into distinct training, evaluation, and testing folds, maintaining both spatial contiguity and meaningful category representation throughout the dataset.
 
-== Allocations
+We include some example fold allocation schematics for Maritime Museum and ROG South in @maritime_fold_schematic and @rog_south_fold_schematic.
+The plots are coloured by fold region (1=train, 2=test, 3=evalution) with multiple subregions supported for the testing and evaluation folds.
+Each region denotes its seed cell with a red star.
+Each cell within each region is colour-graded to show the order it was added to the fold, from darkest to lightest.
+Each cell also contains a box denoting the global order in which the cell was allocated. 
 
-=== Park Row
+Renders for these fold allocations are shown in @maritime_folds_3d and @rog_south_fold_schematic
+The corresponding per-category population breakdown across fold and subregion for these two examples are also summarised in @maritime_category_table and @rog_south_category_table.
 
 
+#figure(
+  image("figs/fold_allocation_schematic_maritime_museum.png", width: 95%),
+  caption: [Mesh partitioning schematic for the Maritime Museum site.],
+  outlined: false,
+  placement: auto,
+  gap: 0em,
+) <maritime_fold_schematic>
+
+#figure(
+  image("figs/maritime_folds_3d.png", width: 95%),
+  caption: [3D render of Maritime Museum fold allocation.],
+  outlined: false,
+  placement: auto,
+  gap: 0em,
+) <maritime_folds_3d>
+
+#set table(
+  stroke: none,
+  gutter: 0.1em,
+  fill: (x, y) =>
+    if x == 0 or y == 0 { black } else { none },
+  inset: (left: 0.5em, right: 0.5em),
+)
+#show table.cell: it => {
+  if it.x == 0 or it.y == 0 {
+    set text(white)
+    strong(it)
+  } else {
+    it
+  }
+}
+#figure(
+table(
+  columns: 8,
+  // Header row
+  [], [Fold 1], [Fold 2], [Region 2], [Region 3], [Fold 3], [Region 4], [Region 5],
+  // Data rows
+  [1_WALL], [58.6%], [20.9%], [8.6%], [12.3%], [20.6%], [12.6%], [7.9%],
+  [2_FLOOR], [65.6%], [20.2%], [8.3%], [12.0%], [14.2%], [9.8%], [4.4%],
+  [3_ROOF], [55.7%], [25.5%], [15.2%], [10.3%], [18.9%], [9.5%], [9.4%],
+  [4_CEILING], [62.3%], [21.4%], [9.1%], [12.4%], [16.3%], [9.6%], [6.7%],
+  [5_FOOTPATH], [59.3%], [17.5%], [5.7%], [11.8%], [23.2%], [12.1%], [11.1%],
+  [6_GRASS], [45.8%], [20.5%], [11.1%], [9.4%], [33.7%], [14.9%], [18.8%],
+  [7_COLUMN], [44.9%], [18.1%], [11.7%], [6.5%], [37.0%], [19.3%], [17.7%],
+  [8_DOOR], [52.8%], [23.4%], [7.5%], [15.9%], [23.8%], [15.5%], [8.4%],
+  [9_WINDOW], [47.7%], [29.6%], [10.7%], [18.9%], [22.7%], [13.4%], [9.3%],
+  [10_STAIR], [62.2%], [22.5%], [10.2%], [12.3%], [15.3%], [9.8%], [5.5%],
+  [11_RAILING], [66.2%], [16.8%], [4.4%], [12.4%], [17.0%], [13.2%], [3.8%],
+  [13_OTHER], [58.2%], [23.9%], [13.1%], [10.8%], [17.9%], [9.8%], [8.2%],
+),
+caption: [Per-category population allocation per-fold and per-subregion for Maritime Museum.],
+placement: auto,
+) <maritime_category_table>
+
+
+#set table(
+  stroke: none,
+  gutter: 0.1em,
+  fill: (x, y) =>
+    if x == 0 or y == 0 { black } else { none },
+  inset: (left: 0.5em, right: 0.5em),
+)
+#show table.cell: it => {
+  if it.x == 0 or it.y == 0 {
+    set text(white)
+    strong(it)
+  } else {
+    it
+  }
+}
+
+#figure(
+  image("figs/fold_allocation_schematic_rog_south.png", width: 95%),
+  caption: [Mesh partitioning schematic for the ROG South site.],
+  outlined: true,
+  placement: auto,
+  gap: 0em,
+) <rog_south_fold_schematic>
+
+#figure(
+  image("figs/rog_south_folds_3d.png", width: 95%),
+  caption: [3D render of Maritime Museum fold allocation.],
+  outlined: false,
+  placement: auto,
+  gap: 0em,
+) <rog_south_folds_3d>
+
+
+#figure(
+  table(
+    columns: 8,
+    // Header row
+    [], [Fold 1], [Fold 2], [Region 2], [Region 3], [Fold 3], [Region 4], [Region 5],
+    // Data rows
+    [1_WALL], [46.6%], [25.7%], [14.9%], [10.8%], [27.7%], [11.0%], [16.7%],
+    [2_FLOOR], [49.5%], [20.5%], [13.7%], [6.9%], [30.0%], [9.0%], [21.0%],
+    [3_ROOF], [35.3%], [22.2%], [19.0%], [3.2%], [42.5%], [19.4%], [23.1%],
+    [4_CEILING], [62.2%], [17.9%], [12.1%], [5.8%], [20.0%], [6.9%], [13.1%],
+    [5_FOOTPATH], [45.6%], [17.5%], [10.3%], [7.3%], [36.9%], [20.8%], [16.1%],
+    [7_COLUMN], [26.0%], [27.2%], [18.0%], [9.3%], [46.8%], [27.4%], [19.4%],
+    [8_DOOR], [48.2%], [21.7%], [14.4%], [7.3%], [30.1%], [3.9%], [26.2%],
+    [9_WINDOW], [35.9%], [29.5%], [20.3%], [9.2%], [34.6%], [7.5%], [27.1%],
+    [10_STAIR], [46.4%], [44.0%], [23.0%], [20.9%], [9.7%], [6.6%], [3.1%],
+    [11_RAILING], [39.0%], [37.0%], [14.9%], [22.1%], [24.0%], [15.1%], [8.9%],
+    [12_RWP], [39.9%], [30.2%], [18.8%], [11.4%], [29.9%], [6.8%], [23.1%],
+    [13_OTHER], [50.0%], [23.2%], [17.3%], [5.9%], [26.8%], [7.6%], [19.3%],
+  ),
+  caption: [Per-category population allocation per-fold and per-subregion for ROG South.],
+  placement: auto,
+) <rog_south_category_table>
+
+#pagebreak()
 
 = Experiments and Results
+TODO 
 
 = Summary and Future Work
 TODO
