@@ -1,4 +1,5 @@
 import logging
+import math
 import shutil
 import subprocess
 import re
@@ -529,32 +530,102 @@ class DataHandler:
 
         logging.info("All folds and sceneids have been processed and saved.")
 
-    def plot_meshes(self):
+    def plot_meshes(self, camera_distance_multiplier=2.2, col_weights=None, z_offset=50):
+        # Use a static backend suitable for scripts and non-interactive environments
         pv.set_jupyter_backend('static')
-        p = pv.Plotter()
+        
+        # Set default column weights if none are provided
+        if col_weights is None:
+            col_weights = [0.42, 0.58]
+        
+        # Create a plotter with a specified window size and subplot shape
+        p = pv.Plotter(shape=(1, 2), window_size=(2000, 800), col_weights=col_weights)
+        
+        # Create a MultiBlock of meshes by appending each mesh
+        blocks = pv.MultiBlock()
+        for mesh in self.extracted_meshes.values():
+            blocks.append(mesh)
+        combined_mesh = blocks.combine()
+        
+        # Compute bounds and center for camera positioning
+        bounds = combined_mesh.bounds  # (xmin, xmax, ymin, ymax, zmin, zmax)
+        x_min, x_max = bounds[0], bounds[1]
+        y_min, y_max = bounds[2], bounds[3]
+        z_min, z_max = bounds[4], bounds[5]
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
+        center_z = (z_min + z_max) / 2
+        
+        # Determine the scene extent
+        scene_extent = max(x_max - x_min, y_max - y_min, z_max - z_min)
+        
+        # For the top-down view, use a fixed camera distance multiplier
+        top_down_camera_distance_multiplier = 2.45  # Adjust this value as needed
+        top_down_camera_distance = scene_extent * top_down_camera_distance_multiplier
+        
+        # For the panoramic view, use the camera_distance_multiplier parameter
+        panoramic_camera_distance = scene_extent * camera_distance_multiplier
+        
+        focal_point = [center_x, center_y, center_z]
+        
+        # Define view_up vectors
+        view_up_top = [0, 1, 0]  # Y-axis is up for top-down view
+        view_up_pano = [0, 0, 1]  # Z-axis is up for panoramic view
+        
+        # First subplot: Top-Down View
+        p.subplot(0, 0)
         for mesh in self.extracted_meshes.values():
             p.add_mesh(mesh, opacity=0.75, rgb=True)
-        p.show_axes_all()
-        p.show_grid(font_size=14)
+        p.show_grid(
+            font_size=14,
+            xtitle="X co-ord (m)",
+            ytitle="Y co-ord (m)",
+            ztitle="Z co-ord (m)",
+            n_xlabels=round((x_max - x_min) / 10),  # Number of labels based on interval
+            n_ylabels=round((y_max - y_min) / 10),
+            n_zlabels=round((z_max - z_min) / 10),
+            location='outer',
+        )
+        top_down_camera_position = [center_x, center_y, z_max + top_down_camera_distance]
+        p.camera_position = [top_down_camera_position, focal_point, view_up_top]
+        p.camera.SetParallelProjection(False)  # Ensure perspective projection
+        p.camera.Zoom(1.0)  # Adjust zoom if necessary
+        
+        # Second subplot: Panoramic View
+        p.subplot(0, 1)
+        for mesh in self.extracted_meshes.values():
+            p.add_mesh(mesh, opacity=0.75, rgb=True)
+        p.show_grid(
+            font_size=14,
+            xtitle="X co-ord (m)",
+            ytitle="Y co-ord (m)",
+            ztitle="Z co-ord (m)",
+            n_xlabels=round((x_max - x_min) / 8),
+            n_ylabels=round((y_max - y_min) / 8),
+            n_zlabels=3,
 
-        bounds = p.renderer.bounds  # Returns (xmin, xmax, ymin, ymax, zmin, zmax)
-        center_x = (bounds[0] + bounds[1]) / 2
-        center_y = (bounds[2] + bounds[3]) / 2
-        center_z = (bounds[4] + bounds[5]) / 2
-
-        # Determine an appropriate camera distance based on scene size
-        # This ensures the entire scene is visible from above
-        scene_extent = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
-        camera_distance = scene_extent * 2.2  # Adjust multiplier as needed
-        # Set the camera position directly above the center, along the +z axis
-        camera_position = [center_x, center_y, bounds[5] + camera_distance]
-        # Define the focal point (where the camera is looking at)
-        focal_point = [center_x, center_y, center_z]
-        # Define the view up vector to maintain the y-axis as "up"
-        view_up = [0, 1, 0]
-        p.camera_position = [camera_position, focal_point, view_up]
+            # n_zlabels=round((z_max - z_min) / 2),
+            location='outer',
+        )
+        elevation_angle = 25  # degrees above the horizon
+        azimuth_angle = 45    # degrees around the z-axis
+        radians_elev = math.radians(elevation_angle)
+        radians_azim = math.radians(azimuth_angle)
+        p.show_axes()
+        
+        # Use panoramic_camera_distance for the panoramic view
+        camera_x = center_x + panoramic_camera_distance * math.cos(radians_elev) * math.cos(radians_azim)
+        camera_y = center_y + panoramic_camera_distance * math.cos(radians_elev) * math.sin(radians_azim)
+        camera_z = center_z + panoramic_camera_distance * math.sin(radians_elev) + z_offset
+        panoramic_camera_position = [camera_x, camera_y, camera_z]
+        
+        p.camera_position = [panoramic_camera_position, focal_point, view_up_pano]
+        p.camera.SetParallelProjection(False)  # Ensure perspective projection
+        p.camera.Zoom(1.0)  # Adjust zoom if necessary
+        
+        # Render the plot
         p.show()
-
+        return p
 
 #################################################################################
 # MeshAnalyser - tools for manipulating meshes and evaluating folds
