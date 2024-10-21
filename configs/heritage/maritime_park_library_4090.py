@@ -33,7 +33,7 @@ sphere_point_max = 220000
 # copied from base config
 resume = True
 evaluate = True
-test_only = False
+test_only = True
 seed = 44350923
 sync_bn = True
 
