@@ -422,6 +422,7 @@ class FoldConfiguration:
         plt.ylabel('Y (m)')
         plt.tight_layout()
         plt.show()
+        return fig, ax
 
     def region_id_to_fold_id(self, region_id):
         for fold_id, fold in self.folds.items():
