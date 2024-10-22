@@ -51,10 +51,24 @@
 ]
 #v(15pt) 
 
+#set table(
+  stroke: none,
+  gutter: 0.1em,
+  fill: (x, y) =>
+    if x == 0 or y == 0 { black } else { none },
+  inset: (left: 0.5em, right: 0.5em),
+)
+#show table.cell: it => {
+  if it.x == 0 or it.y == 0 {
+    set text(white)
+    strong(it)
+  } else {
+    it
+  }
+}
+
 // Document body
 // #show: rest => columns(2, rest)
-// 
-// 
 // #set page(columns: 2) //, height: 150pt)
 
 #outline(
@@ -230,7 +244,7 @@ The corresponding per-category population breakdown across fold and subregion fo
 
 
 #figure(
-  image("figs/fold_allocation_schematic_maritime_museum.png", width: 95%),
+  image("figs/fold_allocation_schematic_maritime_museum.png", width: 100%),
   caption: [Mesh partitioning schematic for the Maritime Museum site.],
   outlined: false,
   placement: auto,
@@ -238,28 +252,14 @@ The corresponding per-category population breakdown across fold and subregion fo
 ) <maritime_fold_schematic>
 
 #figure(
-  image("figs/maritime_folds_3d.png", width: 95%),
-  caption: [3D render of Maritime Museum fold allocation.],
+  image("figs/maritime_folds_3d.png", width: 100%),
+  caption: [3D render of the Maritime Museum fold allocation.],
   outlined: false,
   placement: auto,
   gap: 0em,
 ) <maritime_folds_3d>
 
-#set table(
-  stroke: none,
-  gutter: 0.1em,
-  fill: (x, y) =>
-    if x == 0 or y == 0 { black } else { none },
-  inset: (left: 0.5em, right: 0.5em),
-)
-#show table.cell: it => {
-  if it.x == 0 or it.y == 0 {
-    set text(white)
-    strong(it)
-  } else {
-    it
-  }
-}
+
 #figure(
 table(
   columns: 8,
@@ -301,16 +301,16 @@ placement: auto,
 }
 
 #figure(
-  image("figs/fold_allocation_schematic_rog_south.png", width: 95%),
-  caption: [Mesh partitioning schematic for the ROG South site.],
+  image("figs/fold_allocation_schematic_rog_south.png", width: 100%),
+  caption: [Mesh partitioning schematic for the Royal Observatory South site.],
   outlined: true,
   placement: auto,
   gap: 0em,
 ) <rog_south_fold_schematic>
 
 #figure(
-  image("figs/rog_south_folds_3d.png", width: 95%),
-  caption: [3D render of Maritime Museum fold allocation.],
+  image("figs/rog_south_folds_3d.png", width: 100%),
+  caption: [3D render of the Royal Observatory South fold allocation.],
   outlined: false,
   placement: auto,
   gap: 0em,
@@ -341,7 +341,7 @@ placement: auto,
 ) <rog_south_category_table>
 
 #pagebreak()
-== Library Data Scene Construcion
+== Library Data Scene Construction
 An issue with the raw library data is that each category of HBIM components is physically separated, often by considerable distances.
 This results in an over-clustering of objects within the same category, causing the network to potentially overfit by learning to group proximate objects too strongly in the classification.
 Additionally, the isolation of each sample means that the network's receptive field would predominantly encounter only one category at a time, which can lead to significant issues with stability and convergence during training, as the model lacks exposure to diverse category interactions within the same scene.
@@ -357,11 +357,156 @@ The resulting training set is shown in @library_scene.
   gap: 1em,
 ) <library_scene>
 
-#pagebreak()
-= Experiments and Results
-TODO 
+== Taxonomy
+
+The previous project highlighted several challenges that arise when using a taxonomy that is too finely segmented. Overly detailed class distinctions led to difficulties in classification, as certain categories became too similar to differentiate effectively. This fine segmentation not only increased the complexity of the model but also introduced issues of class imbalance, where some highly specific categories had insufficient representation. The segmentation of similar elements at high levels of granularity resulted in confusion and poor performance in those classes. These challenges motivated the decision to adopt a simpler, more generalized taxonomy, reducing ambiguity between categories and improving overall model stability and performance. 
+
+The new taxonomy is as follows:
+1. *Wall*
+2. *Floor*
+3. *Roof*
+4. *Ceiling*
+5. *Footpath*
+6. *Grass*
+7. *Column*
+8. *Door*
+9. *Window*
+10. *Stair*
+11. *Railing*
+12. *Rainwater Pipe*
+13. *Other* - This category includes miscellaneous elements that do not fit into the primary architectural classes. It handles objects or features that are not consistently represented or easily categorized, ensuring all data is included.
+
+While the taxonomy has been simplified, Rainwater Pipe remains a particularly sparse category in the input data, which could potentially lead to poor performance due to its limited representation.
+Similarly, the Other category is still quite broad, covering a diverse array of features found in heritage sites.
+This could introduce variability and complexity, with a great many different architectural and structural elements grouped together under a single label. 
+
+// #pagebreak()
+= Experimental Method with Pointcept
+TODO: this section will explain the experimental setup that was used across the different site configurations.
+
+== Training and Evaluation Phase
+TODO: include train-time transforms, grid sampling, sphere cropping transforms etc
+
+== Testing Phase
+TODO
+
+= Results
+Three primary experiments were carried out with different sites used in the training and testing. These combinations were:
+- Library scene alone
+- Park Row and Maritime Museum
+- Brass Foundry and both Royal Observatory sites
+The more performant of the real-site experiments then had its training re-run, but with the library scene included in the training phase.
+
+== Library Scene
+
+#figure(
+  table(
+    columns: 4,
+    // Header row
+    [Class Index], [Category Name], [IoU (%)], [Accuracy (%)],
+    // Data rows
+    [-], [All], [82.0 (mean)], [88.9 (mean), 92.4 (overall)],
+    [1], [Wall], [98.6], [98.8],
+    [2], [Floor], [29.3], [39.9],
+    [3], [Roof], [99.9], [100.0],
+    [4], [Ceiling], [92.8], [98.7],
+    [5], [Footpath], [33.1], [56.6],
+    [6], [Grass], [98.1], [98.8],
+    [7], [Column], [98.1], [98.9],
+    [8], [Door], [81.1], [85.4],
+    [9], [Window], [72.4], [94.6],
+    [10], [Stair], [93.9], [97.0],
+    [11], [Railing], [94.4], [97.0],
+    [12], [Rainwater Pipe], [81.1], [93.3],
+    [13], [Other], [93.4], [96.5],
+  ),
+  caption: [Overall and per-category IoU and accuracy results for the Park Row, Maritime Museum, and Library test fold.],
+  placement: none,
+)
+
+== Park Row and Maritime Museum
+
+#figure(
+  table(
+    columns: 4,
+    // Header row
+    [Class Index], [Category Name], [IoU (%)], [Accuracy (%)],
+    // Data rows
+    [-], [All], [62.9 (mean)], [78.9 (mean), 86.2 (overall)],
+    [1], [Wall], [80.1], [86.0],
+    [2], [Floor], [76.8], [86.6],
+    [3], [Roof], [80.2], [82.6],
+    [4], [Ceiling], [70.7], [85.7],
+    [5], [Footpath], [81.5], [99.1],
+    [6], [Grass], [97.5], [99.0],
+    [7], [Column], [54.6], [86.5],
+    [8], [Door], [43.2], [90.0],
+    [9], [Window], [65.3], [82.7],
+    [10], [Stair], [70.7], [79.5],
+    [11], [Railing], [38.2], [80.4],
+    [12], [Rainwater Pipe], [5.4], [9.5],
+    [13], [Other], [53.9], [57.8],
+  ),
+  caption: [Overall and per-category IoU and accuracy results for the Park Row and Maritime Museum test fold.],
+  placement: none,
+)
+
+== Brass Foundry and Royal Observatory
+
+#figure(
+  table(
+    columns: 4,
+    // Header row
+    [Class Index], [Category Name], [IoU (%)], [Accuracy (%)],
+    // Data rows
+    [-], [All], [61.7 (mean)], [70.1 (mean), 83.5 (overall)],
+    [1], [Wall], [81.3], [95.0],
+    [2], [Floor], [59.3], [68.3],
+    [3], [Roof], [63.4], [77.9],
+    [4], [Ceiling], [72.1], [82.7],
+    [5], [Footpath], [58.0], [77.2],
+    [6], [Grass], [95.9], [96.5],
+    [7], [Column], [29.1], [29.5],
+    [8], [Door], [68.6], [72.4],
+    [9], [Window], [51.5], [57.4],
+    [10], [Stair], [46.5], [50.6],
+    [11], [Railing], [78.0], [89.5],
+    [12], [Rainwater Pipe], [24.7], [38.1],
+    [13], [Other], [73.3], [75.5],
+  ),
+  caption: [Overall and per-category IoU and accuracy results for the Brass Foundry and Royal Observatory test fold.],
+  placement: none,
+)
+
+== Augmenting Park Row/Maritime with Library Scene
+
+#figure(
+  table(
+    columns: 4,
+    // Header row
+    [Class Index], [Category Name], [IoU (%)], [Accuracy (%)],
+    // Data rows
+    [-], [All], [60.8 (mean)], [74.9 (mean), 86.4 (overall)],
+    [1], [Wall], [83.1], [90.9],
+    [2], [Floor], [76.9], [84.2],
+    [3], [Roof], [77.1], [85.1],
+    [4], [Ceiling], [68.8], [82.3],
+    [5], [Footpath], [75.8], [99.4],
+    [6], [Grass], [96.4], [97.3],
+    [7], [Column], [50.6], [59.3],
+    [8], [Door], [52.2], [84.4],
+    [9], [Window], [64.1], [79.4],
+    [10], [Stair], [53.5], [67.8],
+    [11], [Railing], [38.5], [75.4],
+    [12], [Rainwater Pipe], [8.4], [18.8],
+    [13], [Other], [45.3], [48.8],
+  ),
+  caption: [Overall and per-category IoU and accuracy results for the Park Row, Maritime Museum test fold with training augmentation from the Library scene.],
+  placement: none,
+)
 
 = Summary and Future Work
 TODO
 
+#pagebreak()
 #bibliography("bibliography.bib")
