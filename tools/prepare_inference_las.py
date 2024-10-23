@@ -1,5 +1,5 @@
 import argparse
-from pointcept.supplemental.converters import create_las_with_results
+from pointcept.supplemental.combine_results import create_las_with_results
 
 def main():
     parser = argparse.ArgumentParser(description="Create LAS files from scenes and results directories and optionally store them in a specified output directory.")
