@@ -10,17 +10,18 @@ import shutil
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 
+
 def create_las_with_results(scenes_dir, results_dir, output_dir=None):
     """
-    Create LAS files by combining scene data and predictions.
+    Create LAS and .pth files by combining scene data and predictions.
 
     Args:
         scenes_dir (str or Path): Directory containing scene .pth files.
         results_dir (str or Path): Directory containing prediction .npy files.
-        output_dir (str or Path, optional): Directory to save output LAS files.
+        output_dir (str or Path, optional): Directory to save output files.
             Defaults to "full_data" subdirectory within results_dir.
 
-    The function reads scene data and corresponding predictions, merges them, and writes out .las files.
+    The function reads scene data and corresponding predictions, merges them, and writes out .las and .pth files.
     If the output directory exists, it will be cleaned (all contents deleted). Otherwise, it will be created.
     """
 
@@ -57,6 +58,7 @@ def create_las_with_results(scenes_dir, results_dir, output_dir=None):
         else:
             logger.warning(f"Scene data for {scene_id} not found in scenes directory.")
 
+
 def clean_and_create_output_dir(output_dir):
     """
     Cleans the output directory if it exists (deletes all contents),
@@ -85,6 +87,7 @@ def clean_and_create_output_dir(output_dir):
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created output directory: {output_dir}")
 
+
 def load_predictions(results_dir):
     """
     Load prediction files from the results directory.
@@ -104,6 +107,7 @@ def load_predictions(results_dir):
             logger.debug(f"Loaded predictions for scene: {scene_id}")
     return predictions
 
+
 def load_scenes(scenes_dir):
     """
     Load scene files from the scenes directory.
@@ -121,15 +125,16 @@ def load_scenes(scenes_dir):
         logger.debug(f"Loaded scene data for scene: {scene_id}")
     return scenes
 
+
 def process_scene(scene_id, scene_data, pred, output_dir):
     """
-    Process a single scene and write out the LAS file.
+    Process a single scene and write out the LAS and .pth files.
 
     Args:
         scene_id (str): Scene identifier.
         scene_data (dict): Scene data containing point coordinates, colors, labels, etc.
         pred (np.array): Prediction array for the scene.
-        output_dir (Path): Directory to save output LAS files.
+        output_dir (Path): Directory to save output files.
     """
     logger.info(f"Processing scene: {scene_id}")
     # Extract data from scene_data
@@ -150,6 +155,27 @@ def process_scene(scene_id, scene_data, pred, output_dir):
     if pred_labels.shape[0] != num_points:
         logger.warning(f"Prediction length {pred_labels.shape[0]} does not match number of points {num_points} for scene {scene_id}.")
         return
+
+    # Prepare data dictionary for .pth file
+    data = {
+        'coord': points.astype(np.float32),
+        'color': colors.astype(np.float32),
+        'scene_id': scene_id
+    }
+
+    if normals is not None:
+        data['normal'] = normals.astype(np.float32)
+
+    if gt_labels is not None:
+        data['gt'] = gt_labels.astype(np.int64)
+
+    # Add predicted labels
+    data['pred'] = pred_labels.astype(np.int64)
+
+    # Save .pth file
+    pth_out = output_dir / f"{scene_id}.pth"
+    torch.save(data, pth_out.as_posix())
+    logger.info(f"Saved .pth file: {pth_out}")
 
     # Prepare LAS header
     header = laspy.LasHeader(version="1.4", point_format=8)

@@ -126,90 +126,90 @@ def clear_directory(directory):
             print(f"Failed to delete {file_path}. Reason: {e}")
 
 
-def partition_pth_file(input_pth_filename, category, name_tag=None, num_voxels_x=None, num_voxels_y=None, num_voxels_z=None, print_contents=True):
-    """This function takes a processed .pth file from the data_root directory,
-    optionally splits it into the requested number of sub-voxels (defaulting unspecified dimensions to 1),
-    creates subdirectories for train, test, and val, and puts the subvoxels into the 'val' directory within
-    the specified output directory for inference."""
+# def partition_pth_file(input_pth_filename, category, name_tag=None, num_voxels_x=None, num_voxels_y=None, num_voxels_z=None, print_contents=True):
+#     """This function takes a processed .pth file from the data_root directory,
+#     optionally splits it into the requested number of sub-voxels (defaulting unspecified dimensions to 1),
+#     creates subdirectories for train, test, and val, and puts the subvoxels into the 'val' directory within
+#     the specified output directory for inference."""
     
-    # This dir is reserved for experiment results, stop the user
-    # from specifying this name.
-    if name_tag == "result":
-        exit("Error: cannot specify 'result' as an experiment name, this dir is reserved for experiment \
-            results. Please give another name.")
+#     # This dir is reserved for experiment results, stop the user
+#     # from specifying this name.
+#     if name_tag == "result":
+#         exit("Error: cannot specify 'result' as an experiment name, this dir is reserved for experiment \
+#             results. Please give another name.")
 
 
-    category_root = ensure_category_dirs(category)
+#     category_root = ensure_category_dirs(category)
 
-    # Load data from the .pth file
-    # input_pth_path = os.path.join(category_root, input_pth_filename)
-    data = torch.load(input_pth_filename)
-    if print_contents:
-        print_dict_structure(data)
-    scene_id = data['scene_id']
+#     # Load data from the .pth file
+#     # input_pth_path = os.path.join(category_root, input_pth_filename)
+#     data = torch.load(input_pth_filename)
+#     if print_contents:
+#         print_dict_structure(data)
+#     scene_id = data['scene_id']
 
-    # Determine if any voxelization parameters are given
-    voxelization_requested = num_voxels_x or num_voxels_y or num_voxels_z
+#     # Determine if any voxelization parameters are given
+#     voxelization_requested = num_voxels_x or num_voxels_y or num_voxels_z
 
-    # Define the directory name based on voxelization
-    if voxelization_requested:
-        num_voxels_x = num_voxels_x or 1
-        num_voxels_y = num_voxels_y or 1
-        num_voxels_z = num_voxels_z or 1
-        dir_name = f"{scene_id}_voxels_{num_voxels_x}x{num_voxels_y}x{num_voxels_z}"
-    else:
-        dir_name = f"{scene_id}"
+#     # Define the directory name based on voxelization
+#     if voxelization_requested:
+#         num_voxels_x = num_voxels_x or 1
+#         num_voxels_y = num_voxels_y or 1
+#         num_voxels_z = num_voxels_z or 1
+#         dir_name = f"{scene_id}_voxels_{num_voxels_x}x{num_voxels_y}x{num_voxels_z}"
+#     else:
+#         dir_name = f"{scene_id}"
 
-    # Use name_tag if provided
-    if name_tag:
-        dir_name = name_tag
+#     # Use name_tag if provided
+#     if name_tag:
+#         dir_name = name_tag
 
-    base_output_directory = os.path.join(category_root, dir_name)
+#     base_output_directory = os.path.join(category_root, dir_name)
 
-    # Check if the base output directory exists and clear it if it does
-    if os.path.exists(base_output_directory):
-        print(f"Clearing existing directory {base_output_directory}")
-        clear_directory(base_output_directory)
+#     # Check if the base output directory exists and clear it if it does
+#     if os.path.exists(base_output_directory):
+#         print(f"Clearing existing directory {base_output_directory}")
+#         clear_directory(base_output_directory)
     
-    os.makedirs(base_output_directory, exist_ok=True)
-    os.makedirs(os.path.join(base_output_directory, 'test'), exist_ok=True)
-    os.makedirs(os.path.join(base_output_directory, 'train'), exist_ok=True)
-    val_directory = os.path.join(base_output_directory, 'val')
-    os.makedirs(val_directory, exist_ok=True)
+#     os.makedirs(base_output_directory, exist_ok=True)
+#     os.makedirs(os.path.join(base_output_directory, 'test'), exist_ok=True)
+#     os.makedirs(os.path.join(base_output_directory, 'train'), exist_ok=True)
+#     val_directory = os.path.join(base_output_directory, 'val')
+#     os.makedirs(val_directory, exist_ok=True)
 
-    # Check if any voxelization parameter is given and default others to 1
-    if voxelization_requested:
-        coords = data['coord']
+#     # Check if any voxelization parameter is given and default others to 1
+#     if voxelization_requested:
+#         coords = data['coord']
 
-        # Calculate the bounds and voxel sizes
-        min_coords = coords.min(axis=0)
-        max_coords = coords.max(axis=0)
-        voxel_size = (max_coords - min_coords) / np.array([num_voxels_x, num_voxels_y, num_voxels_z])
+#         # Calculate the bounds and voxel sizes
+#         min_coords = coords.min(axis=0)
+#         max_coords = coords.max(axis=0)
+#         voxel_size = (max_coords - min_coords) / np.array([num_voxels_x, num_voxels_y, num_voxels_z])
 
-        # Calculate voxel indices for each point
-        voxel_indices = np.floor((coords - min_coords) / voxel_size).astype(int)
-        voxel_indices = np.clip(voxel_indices, 0, [num_voxels_x-1, num_voxels_y-1, num_voxels_z-1])
+#         # Calculate voxel indices for each point
+#         voxel_indices = np.floor((coords - min_coords) / voxel_size).astype(int)
+#         voxel_indices = np.clip(voxel_indices, 0, [num_voxels_x-1, num_voxels_y-1, num_voxels_z-1])
 
-        # Loop over all voxels and save them in the 'val' directory
-        for ix in range(num_voxels_x):
-            for iy in range(num_voxels_y):
-                for iz in range(num_voxels_z):
-                    # Find points in this voxel
-                    voxel_mask = (voxel_indices[:, 0] == ix) & (voxel_indices[:, 1] == iy) & (voxel_indices[:, 2] == iz)
-                    if voxel_mask.any():
-                        voxel_data = {key: data[key][voxel_mask] for key in data if isinstance(data[key], np.ndarray)}
-                        unique_scene_id = f"{data['scene_id']}_voxel_{ix}_{iy}_{iz}"
-                        voxel_data['scene_id'] = unique_scene_id  # Assign unique scene_id
+#         # Loop over all voxels and save them in the 'val' directory
+#         for ix in range(num_voxels_x):
+#             for iy in range(num_voxels_y):
+#                 for iz in range(num_voxels_z):
+#                     # Find points in this voxel
+#                     voxel_mask = (voxel_indices[:, 0] == ix) & (voxel_indices[:, 1] == iy) & (voxel_indices[:, 2] == iz)
+#                     if voxel_mask.any():
+#                         voxel_data = {key: data[key][voxel_mask] for key in data if isinstance(data[key], np.ndarray)}
+#                         unique_scene_id = f"{data['scene_id']}_voxel_{ix}_{iy}_{iz}"
+#                         voxel_data['scene_id'] = unique_scene_id  # Assign unique scene_id
 
-                        # Path for the new split file
-                        voxel_file_path = os.path.join(val_directory, f'{unique_scene_id}.pth')
-                        torch.save(voxel_data, voxel_file_path)
+#                         # Path for the new split file
+#                         voxel_file_path = os.path.join(val_directory, f'{unique_scene_id}.pth')
+#                         torch.save(voxel_data, voxel_file_path)
 
-        print(f"All voxel files saved in {val_directory}")
-    else:
-        original_file_path = os.path.join(val_directory, f'{data["scene_id"]}.pth')
-        torch.save(data, original_file_path)
-        print(f"Original data saved in {val_directory} with file {original_file_path}")
+#         print(f"All voxel files saved in {val_directory}")
+#     else:
+#         original_file_path = os.path.join(val_directory, f'{data["scene_id"]}.pth')
+#         torch.save(data, original_file_path)
+#         print(f"Original data saved in {val_directory} with file {original_file_path}")
 
 
 def create_pc_dataset(pc_dict: dict[str, ty.Any]) -> xr.Dataset:
@@ -269,8 +269,6 @@ def create_pc_dataset(pc_dict: dict[str, ty.Any]) -> xr.Dataset:
             color=(['point', 'color_dim'], pc_dict['color']),
             normal=(['point', 'normal_dim'], pc_dict['normal']),
             gt=(['point'], pc_dict['gt']),
-            # semantic_gt200=(['point'], pc_dict['semantic_gt200']),
-            # instance_gt=(['point'], pc_dict['instance_gt'])
         ),
         coords=dict(
             point=np.arange(num_points),
@@ -379,7 +377,7 @@ def convert_pcd_to_las(
     pcd_data = read_pcd(str(pcd_file_path))
 
     # Create a new LAS file header
-    header = laspy.LasHeader(version="1.4", point_format=2)
+    header = laspy.LasHeader(version="1.4", point_format=8)
     
     # Add extra dimensions for predicted_class and predicted_proba
     header.add_extra_dim(laspy.ExtraBytesParams(name="predicted_class", type="f"))
@@ -423,13 +421,6 @@ def create_las_with_results(scenes_dir, results_dir, output_dir=None):
         "library_val": torch.load(path) 
         for path in scenes_dir.glob("*.pth")
     }
-
-    # classes = [
-    # 'wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table', 'door',
-    # 'window', 'bookshelf', 'picture', 'counter', 'desk', 'curtain',
-    # 'refridgerator', 'shower curtain', 'toilet', 'sink', 'bathtub',
-    # 'otherfurniture'
-    # ]
 
     classes = [
     "wall",

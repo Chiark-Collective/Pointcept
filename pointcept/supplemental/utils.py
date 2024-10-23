@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+import pyvista as pv
 import matplotlib.pyplot as plt
 
 
@@ -295,3 +296,183 @@ def desaturate_color(color, amount=0.05):
     desaturated_color = colorsys.hls_to_rgb(c[0], c[1], new_saturation)
     
     return desaturated_color
+
+
+def render_pointcloud(
+    pth_file,
+    elevation_angle=30,
+    azimuth_angle=45,
+    distance_multiplier=2.05,
+    window_size=(2400, 1000),
+    label_names=None,
+    cmap_name='tab20',
+    point_size=2,
+    show_scalar_bar=True,
+    background_color=[0.89, 0.89, 0.89],
+    background_color_top=[0.73, 0.73, 0.73],
+    camera_view_up=[0, 0, 1],
+):
+    """
+    Renders ground truth and predicted point clouds from a .pth file using PyVista.
+
+    Parameters:
+    - pth_file (str): Path to the .pth file containing point cloud data.
+    - elevation_angle (float): Camera elevation angle in degrees.
+    - azimuth_angle (float): Camera azimuth angle in degrees.
+    - distance_multiplier (float): Multiplier for camera distance based on scene extent.
+    - window_size (tuple): Size of the visualization window (width, height).
+    - label_names (dict): Dictionary mapping label indices to label names.
+                          If None, a default set of labels will be used.
+    - cmap_name (str): Name of the matplotlib colormap to use.
+    - point_size (int): Size of the points in the visualization.
+    - show_scalar_bar (bool): Whether to show the scalar bar in the predictions subplot.
+    - background_color (list): RGB values for the bottom background color.
+    - background_color_top (list): RGB values for the top background color.
+    - camera_view_up (list): The view up vector for the camera.
+
+    Returns:
+    - None
+    """
+    # Set PyVista backend (adjust if not using Jupyter)
+    pv.set_jupyter_backend('static')
+    
+    # Check if file exists
+    if not os.path.isfile(pth_file):
+        raise FileNotFoundError(f"The file {pth_file} does not exist.")
+    
+    # Load the data
+    try:
+        data = torch.load(pth_file)
+    except Exception as e:
+        raise ValueError(f"Error loading the .pth file: {e}")
+    
+    # Extract data
+    try:
+        points = data['coord']
+        gt_labels = data['gt']
+        pred_labels = data['pred']
+    except KeyError as e:
+        raise KeyError(f"Missing key in the loaded data: {e}")
+    
+    # Convert tensors to numpy arrays if necessary
+    if isinstance(points, torch.Tensor):
+        points = points.cpu().numpy()
+    if isinstance(gt_labels, torch.Tensor):
+        gt_labels = gt_labels.cpu().numpy()
+    if isinstance(pred_labels, torch.Tensor):
+        pred_labels = pred_labels.cpu().numpy()
+    
+    # Create point cloud mesh
+    point_cloud = pv.PolyData(points)
+    
+    # Prepare meshes for each subplot
+    mesh_gt = point_cloud.copy()
+    mesh_pred = point_cloud.copy()
+    
+    mesh_gt['labels'] = gt_labels
+    mesh_pred['labels'] = pred_labels
+    
+    # Define the number of classes
+    max_label = max(np.max(gt_labels), np.max(pred_labels))
+    num_classes = int(max_label + 1)  # Assuming labels start at 1
+    
+    # Create a color map
+    cmap = plt.get_cmap(cmap_name, num_classes-1)
+    
+    # Define default label names if not provided
+    if label_names is None:
+        # Example default labels; adjust as needed
+        label_names = {
+            1: 'Wall',
+            2: 'Floor',
+            3: 'Roof',
+            4: 'Ceiling',
+            5: 'Footpath',
+            6: 'Grass',
+            7: 'Column',
+            8: 'Door',
+            9: 'Window',
+            10: 'Stair',
+            11: 'Railing',
+            12: 'RWP',
+            13: 'Other',
+        }
+    
+    # Initialize the plotter with 1 row and 2 columns
+    plotter = pv.Plotter(shape=(1, 2), window_size=window_size)
+    
+    # Scalar bar arguments
+    scalar_bar_args = {
+        'vertical': True,
+        'title_font_size': None,
+        'label_font_size': 16,
+        'shadow': True,
+        'n_labels': len(label_names),
+        'fmt': '%.0f',
+        'color': 'black',
+        'background_color': 'grey',
+        'height': 0.3,
+    }
+    
+    # Left subplot (ground truth)
+    plotter.subplot(0, 0)
+    plotter.add_mesh(
+        mesh_gt,
+        scalars='labels',
+        cmap=cmap,
+        show_scalar_bar=False,
+        point_size=point_size,
+        render_points_as_spheres=True,
+        annotations=label_names,
+        scalar_bar_args=scalar_bar_args,
+    )
+    plotter.add_text("Ground Truth", font_size=19)
+    
+    # Right subplot (predictions)
+    plotter.subplot(0, 1)
+    plotter.add_mesh(
+        mesh_pred,
+        scalars='labels',
+        cmap=cmap,
+        show_scalar_bar=show_scalar_bar,
+        point_size=point_size,
+        render_points_as_spheres=True,
+        annotations=label_names,
+        scalar_bar_args=scalar_bar_args,
+    )
+    plotter.add_text("Predictions", font_size=19)
+    
+    # Get the bounds and center of the point cloud
+    bounds = point_cloud.bounds
+    center = point_cloud.center
+    
+    # Compute scene extent
+    x_range = bounds[1] - bounds[0]
+    y_range = bounds[3] - bounds[2]
+    z_range = bounds[5] - bounds[4]
+    scene_extent = max(x_range, y_range, z_range)
+    
+    # Define the camera position
+    elev_rad = np.radians(elevation_angle)
+    azim_rad = np.radians(azimuth_angle)
+    
+    camera_distance = scene_extent * distance_multiplier
+    
+    camera_x = center[0] + camera_distance * np.cos(elev_rad) * np.cos(azim_rad)
+    camera_y = center[1] + camera_distance * np.cos(elev_rad) * np.sin(azim_rad)
+    camera_z = center[2] + camera_distance * np.sin(elev_rad)
+    camera_position = [camera_x, camera_y, camera_z]
+    
+    focal_point = center
+    view_up = camera_view_up
+    
+    plotter.set_background(color=background_color, top=background_color_top)
+    
+    # Apply camera settings to both subplots
+    for idx in range(2):
+        plotter.subplot(0, idx)
+        plotter.camera.SetParallelProjection(False)
+        plotter.camera_position = [camera_position, focal_point, view_up]
+    
+    # Display the plot
+    plotter.show()
