@@ -16,7 +16,7 @@ hooks = [
 
 # path settings
 my_data_root = "data/qh_inference"
-weight = 'exp/heritage/qh_inference/model/model_best.pth'
+weight = 'exp/heritage/qh_inference_v1/model/model_best.pth'
 
 # misc custom setting
 epoch = 500
