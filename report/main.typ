@@ -214,6 +214,28 @@ A concern raised in this approach is that stripping the building elements of the
   gap:1em,
 ) <library_raw>
 
+== Taxonomy
+The previous project highlighted several challenges that arise when using a taxonomy that is too finely segmented. Overly detailed class distinctions led to difficulties in classification, as certain categories became too similar to differentiate effectively. This fine segmentation not only increased the complexity of the model but also introduced issues of class imbalance, where some highly specific categories had insufficient representation. The segmentation of similar elements at high levels of granularity resulted in confusion and poor performance in those classes. These challenges motivated the decision to adopt a simpler, more generalized taxonomy, reducing ambiguity between categories and improving overall model stability and performance. 
+
+The new taxonomy is as follows:
+1. *Wall*
+2. *Floor*
+3. *Roof*
+4. *Ceiling*
+5. *Footpath*
+6. *Grass*
+7. *Column*
+8. *Door*
+9. *Window*
+10. *Stair*
+11. *Railing*
+12. *Rainwater Pipe*
+13. *Other* - This category includes miscellaneous elements that do not fit into the primary architectural classes. It handles objects or features that are not consistently represented or easily categorized, ensuring all data is included.
+
+While the taxonomy has been simplified, Rainwater Pipe remains a particularly sparse category in the input data, which could potentially lead to poor performance due to its limited representation.
+Similarly, the Other category is still quite broad, covering a diverse array of features found in heritage sites.
+This could introduce variability and complexity, with a great many different architectural and structural elements grouped together under a single label. 
+
 = Fold Allocation
 Training, evaluation, and testing datasets serve distinct purposes in the model development pipeline. The training fold is used to train the model, the evaluation fold is periodically run during training to monitor performance and prevent over-fitting on the training sample, and the testing fold is reserved for assessing the final model's performance on unseen data, providing a true measure of its generalization ability.
 
@@ -350,39 +372,22 @@ To mitigate this, the library component meshes were divided into small 2.5m² ce
 The resulting training set is shown in @library_scene.
 
 #figure(
-  image("figs/library_scene.jpg", width: 110%),
+  image("figs/library_scene.jpg", width: 100%),
   caption: [The recombined library scene for the training fold.],
   outlined: false,
   placement: none,
   gap: 1em,
 ) <library_scene>
 
-== Taxonomy
-
-The previous project highlighted several challenges that arise when using a taxonomy that is too finely segmented. Overly detailed class distinctions led to difficulties in classification, as certain categories became too similar to differentiate effectively. This fine segmentation not only increased the complexity of the model but also introduced issues of class imbalance, where some highly specific categories had insufficient representation. The segmentation of similar elements at high levels of granularity resulted in confusion and poor performance in those classes. These challenges motivated the decision to adopt a simpler, more generalized taxonomy, reducing ambiguity between categories and improving overall model stability and performance. 
-
-The new taxonomy is as follows:
-1. *Wall*
-2. *Floor*
-3. *Roof*
-4. *Ceiling*
-5. *Footpath*
-6. *Grass*
-7. *Column*
-8. *Door*
-9. *Window*
-10. *Stair*
-11. *Railing*
-12. *Rainwater Pipe*
-13. *Other* - This category includes miscellaneous elements that do not fit into the primary architectural classes. It handles objects or features that are not consistently represented or easily categorized, ensuring all data is included.
-
-While the taxonomy has been simplified, Rainwater Pipe remains a particularly sparse category in the input data, which could potentially lead to poor performance due to its limited representation.
-Similarly, the Other category is still quite broad, covering a diverse array of features found in heritage sites.
-This could introduce variability and complexity, with a great many different architectural and structural elements grouped together under a single label. 
-
 // #pagebreak()
-= Experimental Method with Pointcept
+= PTv3 with PPT
 TODO: this section will explain the experimental setup that was used across the different site configurations.
+
+== Input Variables
+
+== PTv3 backbone
+
+== Point Prompt Training
 
 == Training and Evaluation Phase
 TODO: include train-time transforms, grid sampling, sphere cropping transforms etc
@@ -397,7 +402,42 @@ Three primary experiments were carried out with different sites used in the trai
 - Brass Foundry and both Royal Observatory sites
 The more performant of the real-site experiments then had its training re-run, but with the library scene included in the training phase.
 
-== Library Scene
+A model was also tested on a site it had not see at all, to test the ability to generalise when using such small training data sets.
+Finally, inference on a real LiDAR cloud of the Queens House site was run using the most performant model.
+
+
+== Intra-site experiments
+
+Each of these experiments refer to a model that was trained and tested on the same site/sites.
+
+=== Library Scene
+The experiment training on just the HBIM library scenes functions as a metric for how distinguishable the different category geometries are in isolation.
+The extremely synthetic nature of this scene means the model is unable to learn from typical geometric context between elements, limiting its ability to distinguish geometrically similar categories that would normally be distinguishable by that context (e.g. walkways and floors are almost identical given the lack of surface texturing and color texturing).
+
+This reflects in the inference results for the test scene.
+As can be seen in the summarised metrics in @lib_metrics and the confusion matrix in @lib_confmatrix, features that are geometrically similar are frequent points of confusion.
+We note that classification for grass, ceilings and roofs perform well while floor and footpath are frequently mis-identified for one another:
+- grass has enough RGB data (being the only green surface) to be identified by the network, showing the network is capable of using RGB information when the information makes for a powerful discriminator.
+- ceiling and roof elements in the scene are elevated with a random offset, it's likely the network is learning to distinguish these two from other categories because of their relative height in the scene, showing the network is properly using z-axis contextual information.
+- ceiling and roof are well-distinguished between each other because their shapes in the HBIM library are quite different. Ceilings tend to be sloped, roofs tend to be flat. As such we should not a priori expect strong separation in real scenes based on geometry alone: contextual information will be very important.
+
+The results for categories which are geometrically distinct like railings, columns, RWP etc, the low-rank adaptation has sufficient felxibility to capture those differences.
+
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
+
+#figure(
+  image("figs/lib_inference2.png", width: 110%),
+  caption: [Library test scene inference (top-down).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf2>
 
 #figure(
   table(
@@ -420,11 +460,19 @@ The more performant of the real-site experiments then had its training re-run, b
     [12], [Rainwater Pipe], [81.1], [93.3],
     [13], [Other], [93.4], [96.5],
   ),
-  caption: [Overall and per-category IoU and accuracy results for the Park Row, Maritime Museum, and Library test fold.],
+  caption: [Overall and per-category IoU and accuracy results for the Library test scene.],
   placement: none,
-)
+) <lib_metrics>
 
-== Park Row and Maritime Museum
+#figure(
+  image("figs/lib_confmatrix.png", width: 120%),
+  caption: [Library test scene confusion matrix.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_confmatrix>
+
+=== Park Row and Maritime Museum
 
 #figure(
   table(
@@ -451,7 +499,7 @@ The more performant of the real-site experiments then had its training re-run, b
   placement: none,
 )
 
-== Brass Foundry and Royal Observatory
+=== Brass Foundry and Royal Observatory
 
 #figure(
   table(
@@ -478,7 +526,7 @@ The more performant of the real-site experiments then had its training re-run, b
   placement: none,
 )
 
-== Augmenting Park Row/Maritime with Library Scene
+=== Augmenting Park Row/Maritime with Library Scene
 
 #figure(
   table(
@@ -505,8 +553,16 @@ The more performant of the real-site experiments then had its training re-run, b
   placement: none,
 )
 
+== Inter-site experiments: Park Row/MM model with Brass Foundry test scene
+
+== Inference on Queens House LiDAR data
+
 = Summary and Future Work
 TODO
+
+== Custom Loss Functions
+
+== Refactoring the "Other" Category
 
 #pagebreak()
 #bibliography("bibliography.bib")
