@@ -45,9 +45,11 @@
   ]
 )
 #align(center)[
-  #set par(justify: false)
+  #set par(justify: true)
   *Abstract* \
-  #lorem(80)
+  In this study, a low-rank adaptation (LoRA) was applied to a Point Transformer v3 model with Point Prompt Tuning (PPT), pre-trained on ScanNet, S3DIS, and Structured3D datasets, to explore the feasibility of using Heritage Building Information Modeling (HBIM) site data for semantic segmentation on point clouds acquired through real LiDAR.
+  Models were trained with an intra-site fold allocation strategy, achieving 83-86% overall accuracy and 62-63% mIoU within the same site.
+  Limitations in generalization were observed in both application to HBIM sites the models had not seen, and application to a point cloud of a heritage site acquired through real LiDAR;  these likely arise due to poor colour information in the existing models, and extremely limited input data to the models, both of which should be tractable issues in future work.
 ]
 #v(15pt) 
 
@@ -149,8 +151,7 @@ One of the key advantages of LoRA is its modularity. Multiple LoRA adapters can 
 
 Recent research has explored variations of LoRA, such as QLoRA (Quantized LoRA), which further reduces memory requirements by using quantization techniques @dettmers2023qlora, and AdaLoRA, which adaptively adjusts the rank during training @zhang2023adalora. These developments continue to push the boundaries of efficient fine-tuning, making it possible to adapt large language models and diffusion models on consumer-grade hardware.
 
-== Conclusion
-LoRA represents a significant advancement in the field of transfer learning, offering a compelling balance between performance, efficiency, and flexibility. Its widespread adoption in both academic and industrial settings underscores its importance in the current landscape of deep learning research and applications @hu2021lora.
+In summary, LoRA represents a significant advancement in the field of transfer learning, offering a compelling balance between performance, efficiency, and flexibility. Its widespread adoption in both academic and industrial settings underscores its importance in the current landscape of deep learning research and applications @hu2021lora.
 
 = Site Data
 Heritage Building Information Modeling (HBIM) data consists of detailed, structured 3D models of historical buildings that capture both their geometric features and semantic information. It includes precise representations of architectural elements like walls, columns, windows, and other building components, often derived from laser scans, photogrammetry, and archival records. HBIM data not only provides an accurate digital replica of the building's structure but also embeds relevant historical and construction details, making it a valuable resource for conservation, restoration, and analysis of heritage sites.
@@ -381,9 +382,19 @@ The resulting training set is shown in @library_scene.
 
 // #pagebreak()
 = PTv3 with PPT
-TODO: this section will explain the experimental setup that was used across the different site configurations.
 
 == Input Variables
+The input variables for our point cloud segmentation model include the point coordinates (x, y, z), point normals in each direction (nx, ny, nz), and the RGB color channels.
+This streamlined input structure leverages the core geometric and color-based information necessary for segmentation, focusing on features that are universally interpretable across various scenes and capture the essential spatial and color data of each point.
+
+In contrast, the previous Random Forest approach relied on a far broader range of input variables, incorporating numerous hand-crafted features
+designed to aid discrimination between classes.
+While effective, this approach required extensive feature engineering, and its performance was inherently limited by the quality and relevance of these manually defined variables.
+
+The deep learning approach, however, is not restricted by predefined input variables;
+instead, the network learns to create its own pseudo-variables or internal representations that are optimized for segmentation.
+Through layers of abstraction, the model identifies patterns and constructs complex features that improve its ability to differentiate between classes, particularly those with subtle or overlapping characteristics.
+This flexibility in representation allows deep learning models to achieve higher segmentation accuracy and generalizability, particularly when dealing with complex or large datasets, as it enables the model to learn the most discriminative aspects of the input data autonomously.
 
 == PTv3 backbone
 
@@ -957,15 +968,33 @@ For a model trained on such a finite amount of data, this is a very encouraging 
 
 #figure(
   image("figs/qh3.png", width: 89%),
-  caption: [Model predictions for an interior section of the Queens House. The stairway in the center of the image is very well resolved from the surrounding elements.],
+  caption: [Model predictions for an interior section of the Queens House. The stairway in the center of the image is well resolved from the surrounding elements.],
   outlined: false,
   placement: none,
   gap: 1em,
 ) <qh3>
 
+== Results Summary
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-= Summary and Future Work
-TODO
+= Future Work
+In this section, we will describe possible efforts that could improve the performance of the network, with particular focus on improvements that could benefit
+applications to point clouds gathered with LiDAR instrumentation.
+
+== Training with more HBIM site data
+Model performance could likely be improved substantially by expanding the HBIM dataset to include data from additional sites.
+Currently, only two out of four available sites are used in each model's training, which limits the model's exposure to a diverse range of architectural styles and environmental variations present across heritage buildings.
+Training a model with data from all four sites would provide a more comprehensive understanding of these variations, enhancing the model's ability to generalize and accurately segment across different structures.
+Further augmentation with additional HBIM data from new sites added to the project in the future would likely yield even greater gains in performance.
+
+== Enhancing colour information
+Performance of the network could be greatly improved by the inclusion of proper colour texture information in the meshes, allowing geometrically similar features such as floors and footpaths to be more easily distinguished.
+These features, often difficult to differentiate based solely on geometry, can present similar shapes and structural characteristics.
+However, by introducing accurate color information, additional distinctions could be made based on the natural variations in texture and color patterns found in real-world scenes.
+
+The presence of some limited mesh color and texture information suggests that complete texture information is indeed available in the HBIM data.
+Therefore, a relatively minor adjustment to the data ingestion pipeline could ensure that these textures are fully preserved and utilized.
+By enabling color to complement geometry, the network's segmentation accuracy across challenging classes could be significantly enhanced.
 
 == Custom Loss Functions <customloss>
 
