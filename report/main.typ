@@ -49,7 +49,7 @@
   *Abstract* \
   In this study, a low-rank adaptation (LoRA) was applied to a Point Transformer v3 model with Point Prompt Tuning (PPT), pre-trained on ScanNet, S3DIS, and Structured3D datasets, to explore the feasibility of using Heritage Building Information Modeling (HBIM) site data for semantic segmentation on point clouds acquired through real LiDAR.
   Models were trained with an intra-site fold allocation strategy, achieving 83-86% overall accuracy and 62-63% mIoU within the same site.
-  Limitations in generalization were observed in both application to HBIM sites the models had not seen, and application to a point cloud of a heritage site acquired through real LiDAR;  these likely arise due to poor colour information in the existing models, and extremely limited input data to the models, both of which should be tractable issues in future work.
+  Limitations in generalization were observed in both application to HBIM sites the models had not seen, and application to a point cloud of a heritage site acquired through real LiDAR. We identifiy the likely causes as poor colour information in the supplied site models, insufficient diversity and volume of input data to the models, and semantic label noise in the "other" category. We suggest strategies for addressing these issues in future work.
 ]
 #v(15pt) 
 
@@ -82,7 +82,7 @@
 = Introduction
 3D scanning technologies, such as LiDAR and photogrammetry, are transforming heritage preservation by enabling the capture of highly detailed digital models of historical sites and artifacts. These precise scans allow for accurate documentation, analysis, and virtual restoration, ensuring that cultural heritage is preserved and accessible for future study even if the physical structures degrade or are damaged over time.
 
-AI technologies are becoming essential tools in heritage preservation by automating the processing and analysis of vast amounts of 3D data, such as point clouds generated from LiDAR or photogrammetry. Through techniques like semantic segmentation and pattern recognition, AI can help identify and classify architectural elements, detect structural damage, and even predict future degradation. This reduces manual effort, speeds up analysis, and enables large-scale digital documentation of heritage sites, ultimately enhancing the ability to preserve and restore cultural assets efficiently and accurately.
+AI technologies are becoming essential tools in heritage preservation by automating the processing and analysis of vast amounts of 3D data, such as point clouds generated from LiDAR or photogrammetry. Through techniques like semantic segmentation and object detection, AI can help identify and classify architectural elements, detect structural damage, and even predict future degradation. This reduces manual effort, speeds up analysis, and enables large-scale digital documentation of heritage sites, ultimately enhancing the ability to preserve and restore cultural assets efficiently and accurately.
 
 == Previous Work
 Drawing on previous classification work performed on Milan Cathedral @teruggi2020, where a hierarchical machine learning approach was used with Random Forest algorithms, the authors conducted a previous experiment using a 1.2B point dataset captured by LiDAR scan of a heritage building (the Queens House villa in Greenwich).
@@ -92,7 +92,7 @@ Hierarchical classification was employed to manage the computational challenges 
 The experiment's findings revealed three major issues: geometric feature neighborhood values were not well-matched to label hierarchy levels, fixed-scale features imposed restrictive assumptions, and the presence of too-similar classes within levels hindered classifier performance.
 
 == Deep Learning Approach
-The Point Transformer models @zhao2021pointtransformer (can offer a more robust solution by inherently encoding multi-scale information through its serialized attention mechanism. Unlike Random Forests, which rely on pre-defined feature sets and spatial resolutions, the Point Transformer dynamically learns to attend to relevant spatial relationships across a wider perceptive field, with up to 1024 points. This enables the model to capture both fine-grained local features and broader structural context simultaneously, effectively addressing the need for multi-scale feature representation. By leveraging self-attention across large point neighborhoods, the Point Transformer allows for more nuanced and flexible classification without the rigid constraints of hierarchical systems, making it better suited to the complexity and scale of point cloud data in heritage preservation tasks.
+The Point Transformer models @zhao2021pointtransformer can offer a more robust solution by inherently encoding multi-scale information while learning appropriate internal geometric features. Unlike Random Forests, which rely on pre-defined feature sets and spatial resolutions, the Point Transformer dynamically learns to attend to relevant spatial relationships across a wider perceptive field, with up to 1024 points. This enables the model to capture both fine-grained local features and broader structural context simultaneously, effectively addressing the need for multi-scale feature representation. By leveraging self-attention across large point neighborhoods, the Point Transformer allows for more nuanced and flexible classification without the rigid constraints of hierarchical systems, making it better suited to the complexity and scale of point cloud data in heritage preservation tasks.
 
 The current state-of-the-art in this field is the Point Transformer v3 @wu2024ptv3, or PTv3.
 This replaces precise neighbor search (as used in previous iterations like PTv2) with a more efficient KNN-based approach, allowing for substantial improvements in processing speed — up to 3x faster — and memory efficiency, with a 10x reduction in memory usage. This allows the model to handle much larger point clouds while maintaining state-of-the-art accuracy. Enhanced further with multi-dataset joint training, PTv3 achieves leading results across over 20 downstream tasks in both indoor and outdoor environments, demonstrating its robustness and versatility in large-scale 3D representation learning.
@@ -454,45 +454,44 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 
 1. Initialization
 
-  Input point cloud is first serialized using one of the four patterns (Z-order, Trans Z-order, Hilbert, or Trans Hilbert)
-  These space-filling curves map 3D coordinates to 1D sequences while preserving some degree of spatial locality
-  An embedding layer maps the input features to the initial channel dimension
+  The input point cloud is first serialized using one of the four patterns (Z-order, Trans Z-order, Hilbert, or Trans Hilbert).
+  These space-filling curves map 3D coordinates to 1D sequences while preserving some degree of spatial locality.
+  An embedding layer then maps the input features to the initial channel dimension.
 
 2. Encoder Processing
 
-  Grid pooling downsamples points while increasing feature dimensionality
-  The "Shuffle Orders" mechanism randomly varies which serialization pattern will be used for the next block
-  This variation means points that are separated in one pattern might be grouped together in another, enabling 
-  information flow across the point cloud without expensive shift or dilation operations
-  Points are then processed through multiple blocks (depths [2,2,6,2] across each of the four encoder stages)
-
+  Grid pooling downsamples points while increasing feature dimensionality. The "Shuffle Orders" mechanism randomly 
+  varies which serialization pattern will be used for the next block. This variation means points that are separated 
+  in one pattern might be grouped together in another, enabling information flow across the point cloud without 
+  expensive shift or dilation operations. Points are then processed sequentially by multiple blocks (depths [2,2,6,2] across 
+  each of the four encoder stages).
 
 3. Block Structure
-  Each block with an encoder stage processes points through:
 
-  xCPE (enhanced Conditional Positional Encoding):
+  Each encoder block is comprised of the following operations:
 
-  Implemented as a sparse convolution layer with skip connection
-  The sparse convolution operates on local neighborhoods defined by the voxel grid. This provides each point 
-  with information about its position relative to nearby points.
-  Unlike traditional relative positional encoding that requires computing pairwise distances (26% of forward time in PTv2), xCPE achieves similar goals through efficient sparse operations
+  - xCPE (enhanced Conditional Positional Encoding)
 
-  LayerNorm:
+    Implemented as a sparse convolution layer with a skip connection. The sparse convolution operates on local neighborhoods 
+    defined by the voxel grid. This provides each point with information about its position relative to nearby points.
+    Unlike traditional relative positional encoding that requires computing pairwise distances (26% of forward time in PTv2), 
+    xCPE achieves similar goals through efficient sparse operations.
 
-  Normalizes features independently for each point, maintaining consistent scales throughout the network
-  Computes the mean and standard deviation across feature dimensions, then normalizes and applies learned scaling and offset parameters
-  Critical for stable training in deep networks, particularly with attention mechanisms
-  Used both before and after attention to ensure properly scaled features 
-  Works well with variable batch sizes and sequence lengths, making it ideal for point cloud processing where input sizes can vary
+  - LayerNorm
 
-  Self-attention:
+    Normalizes features independently for each point, maintaining consistent scales throughout the network
+    Computes the mean and standard deviation across feature dimensions, then normalizes and applies learned scaling and offset parameters
+    Critical for stable training in deep networks, particularly with attention mechanisms.
+    Works well with variable batch sizes and sequence lengths, making it ideal for point cloud processing where input sizes can vary
+    Used both before and after self-attention to ensure properly scaled features.
 
-  Points are grouped into non-overlapping patches of 1024 points along the serialized order
-  Each patch processes independently through standard query-key-value attention
-  The large patch size (vs PTv2's 16 points) is made possible by the efficiency gains from serialization
+  - Self-attention
 
-  MLP layer for feature transformation
+    Points are grouped into non-overlapping patches of 1024 points along the serialized order
+    Each patch processes independently through standard query-key-value attention
+    The large patch size of 1024 (vs PTv2's 16 points) is made possible by the efficiency gains from serialization
 
+  - MLP layer for pointwise feature transformation
 
 The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
 
