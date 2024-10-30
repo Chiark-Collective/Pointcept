@@ -398,6 +398,9 @@ This flexibility in representation allows deep learning models to achieve higher
 
 == PTv3 backbone
 
+In the interests of completeness we give an overview of the PTv3 architecture described in @wu2024ptv3. 
+For a complete picture, we recommend the source publication.
+
 Processing point clouds presents unique challenges compared to structured data like images. 
 While images come with an inherent grid structure, point clouds are unordered sets of points in 3D space. 
 This unstructured nature has traditionally forced architectures to use computationally expensive 
@@ -496,6 +499,10 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
 
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
+
+== Point Prompt Training (PPT) module
+
+TODO
 
 === Results
 
