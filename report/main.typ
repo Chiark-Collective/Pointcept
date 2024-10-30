@@ -721,9 +721,10 @@ With multi-dataset joint training, these results improve further, demonstrating 
 PTv3 shows that simplifying architecture design while focusing on scalability can lead to superior performance without sacrificing accuracy. Its reduced computational requirements make high-performance point cloud processing more practical for real-world applications, while its ability to leverage larger-scale training through multi-dataset approaches points to promising future developments in the field.
 The success of PTv3 challenges the notion that increasing architectural complexity is necessary for improved performance, suggesting instead that thoughtful simplification enabling better scaling might be a more productive direction for future research.
 
-=== Point Prompt Training (PPT) module
+== Point Prompt Training (PPT) module
 
-TODO
+Here we provide an overview of Ref. @wu2024ppt for completeness. Point Prompt Training represents a novel approach to enabling multi-dataset learning for 3D point cloud models. 
+Where previous approaches struggled with negative transfer when training on multiple datasets simultaneously, PPT introduces mechanisms to handle domain differences while maintaining model performance. The key insight of PPT is that dataset-specific prompts can help the model adapt to different data distributions while sharing a common feature extraction backbone.
 
 #figure(
   image("figs/ppt_1.png", width: 100%),
@@ -733,6 +734,59 @@ TODO
   gap: 1em,
 ) <ppt_1>
 
+The PPT framework consists of two primary components:
+
+1. Domain Prompt Adapter with Prompt-driven Normalization
+2. Language-guided Categorical Alignment
+
+=== Domain Prompt Adapter
+
+The domain prompt adapter allows the model to handle different dataset contexts through learnable domain-specific prompts. For each dataset i, PPT generates a learnable d-dimensional vector that serves as the domain-specific prompt. These prompts are then integrated into the network through Prompt-driven Normalization (PDNorm).
+
+PDNorm replaces standard normalization layers throughout the network with a prompt-aware variant:
+
+PDNorm(x, c) = ((x - E[x̄])/√(Var[x̄] + ϵ)) · γ(c) + β(c)
+
+where:
+- x is the input feature map
+- c is the domain-specific prompt
+- γ(c) and β(c) are learned scale and shift parameters generated from the prompt
+- E[x̄] and Var[x̄] are computed independently for each dataset
+
+This approach allows the network to adapt its feature normalization behavior based on the source dataset while maintaining a shared backbone. The domain prompts are trained jointly with the backbone network, allowing the model to learn optimal dataset-specific adaptations.
+
+To ensure stable training, PPT employs:
+- Zero-initialization of γ(c) and β(c) parameters
+- Learning rate scaling for prompt-related parameters (typically 0.1x the backbone learning rate)
+- Shared prompts across network layers rather than layer-specific prompts
+
+=== Language-guided Categorical Alignment
+
+A major challenge in multi-dataset training is handling different label spaces across datasets. PPT addresses this through Language-guided Categorical Alignment (LCA), which projects point features into a shared semantic space aligned with language embeddings of category labels.
+
+The process works as follows:
+
+1. Category names from all datasets are embedded using a pre-trained text encoder (e.g., CLIP)
+2. Point features are projected into the same embedding space
+3. Classification is performed by computing similarities between point embeddings and category embeddings
+4. The InfoNCE loss is used to align point representations with their corresponding category embeddings
+
+This approach has several advantages:
+- Creates a unified semantic space across datasets
+- Leverages semantic relationships between categories
+- Enables zero-shot transfer to new categories
+- Allows the model to benefit from semantic similarity between categories across datasets
+
+The loss function for a point feature p and its corresponding category text embedding t is:
+
+L = -log(exp(p·t/τ) / Σ(exp(p·t_i/τ)))
+
+where:
+- τ is a temperature parameter (typically set to 0.07)
+- The sum in the denominator is over negative samples from the same dataset
+
+=== Training Process
+
 #figure(
   image("figs/ppt_2.png", width: 100%),
   caption: [Schematic from Ref. @wu2024ppt of the two main components of PPT in the network. Prompt-driven normalisation modules injected into the PTv3 backbone layers permits learning a lightweight dataset-specific feature rescaling. The language-guided categorical alignment module projects the point representations from the backbone into the space of the class-label CLIP embedding vectors and computes logits from their inner product.],
@@ -740,6 +794,39 @@ TODO
   placement: none,
   gap: 1em,
 ) <ppt_2>
+
+PPT was demonstrated in two training scenarios:
+
+1. Supervised joint training:
+   - Train on multiple datasets simultaneously
+   - Use domain prompts and LCA to handle dataset differences
+   - Evaluate directly on target datasets
+
+2. Supervised pre-training:
+   - Pre-train on multiple datasets using PPT
+   - Subsequently fine-tune on specific target dataset(s)
+   - Benefits from better initialization due to multi-dataset exposure 
+
+The sampling ratio between datasets during training was determined based on the optimal number 
+of iterations needed for each dataset. This ensures each dataset contributes proportionally to 
+the learned representations.
+
+==== Performance Impact
+
+PPT demonstrates significant improvements over baseline approaches:
+- Eliminates negative transfer between datasets
+- Improves performance on individual datasets compared to single-dataset training
+- Enables effective knowledge transfer between synthetic and real datasets
+- Achieves state-of-the-art results on multiple benchmarks with a single shared-weight model
+
+For example, on ScanNet validation:
+- Baseline SparseUNet: 72.2 mIoU
+- With PPT joint training: 75.7 mIoU (+3.5)
+- With PPT fine-tuning: 76.4 mIoU (+4.2)
+
+Similar improvements are seen across other datasets and architectures, demonstrating PPT's effectiveness as a general approach to multi-dataset 3D representation learning.
+
+
 
 
 = Experimental Setup
