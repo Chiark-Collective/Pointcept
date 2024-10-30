@@ -1345,8 +1345,6 @@ For a model trained on such a finite amount of data, this is a very encouraging 
   gap: 1em,
 ) <qh3>
 
-== Results Summary
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Future Work
 In this section, we will describe possible efforts that could improve the performance of the network, with particular focus on improvements that could benefit
@@ -1357,6 +1355,10 @@ Model performance could likely be improved substantially by expanding the HBIM d
 Currently, only two out of four available sites are used in each model's training, which limits the model's exposure to a diverse range of architectural styles and environmental variations present across heritage buildings.
 Training a model with data from all four sites would provide a more comprehensive understanding of these variations, enhancing the model's ability to generalize and accurately segment across different structures.
 Further augmentation with additional HBIM data from new sites added to the project in the future would likely yield even greater gains in performance.
+
+Additionally, instead of employing arbitrary combinations of sites for training and testing, a k-fold cross-validation approach could be adopted.
+In this methodology, each site would systematically serve as the testing case in successive permutations of the dataset.
+This structured evaluation strategy would facilitate a more comprehensive understanding of the network's performance and its ability to generalize across diverse architectural contexts.
 
 == Enhancing colour information
 Performance of the network could be greatly improved by the inclusion of proper colour texture information in the meshes, allowing geometrically similar features such as floors and footpaths to be more easily distinguished.
