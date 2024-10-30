@@ -422,6 +422,14 @@ using the space-filling curve mapping function.
 Points are then sorted according to these indices, forming an ordered sequence in which they retain 
 their original features (RGB values and surface normals).
 
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
+
 This process inevitably loses some precise spatial information. For example, two points that are close in 
 3D space might end up with quite different sequence indices if they fall on opposite sides of a 
 space-filling curve boundary. However, PTv3's use of multiple serialization patterns helps mitigate this: 
@@ -437,6 +445,14 @@ After serialization, points are grouped into non-overlapping patches of 1024 poi
 order. This large patch size is a key advancement - previous architectures like PTv2 were limited to just 
 16 points in their local attention windows due to computational constraints. The efficient serialization 
 approach enables this dramatic expansion of the receptive field.
+
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
 
 === Receptive Field and Multi-Scale Processing
 
@@ -498,11 +514,35 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 
 The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
 
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
+
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
 
 == Point Prompt Training (PPT) module
 
 TODO
+
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
+
+#figure(
+  image("figs/lib_inference1.png", width: 110%),
+  caption: [Library test scene inference (panoramic).],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <lib_inf1>
 
 === Results
 
