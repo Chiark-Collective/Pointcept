@@ -265,14 +265,14 @@ Each cell within each region is colour-graded to show the order it was added to 
 Each cell also contains a box denoting the global order in which the cell was allocated. 
 
 Renders for these fold allocations are shown in @maritime_folds_3d and @rog_south_folds_3d.
-The corresponding per-category population breakdown across fold and subregion for these two examples are also summarised in @maritime_category_table and @rog_south_category_table.
+The corresponding per-category population breakdown across fold and subregions for these two examples are also summarised in accompanying tables.
 
 
 #figure(
   image("figs/fold_allocation_schematic_maritime_museum.png", width: 100%),
   caption: [Mesh partitioning schematic for the Maritime Museum site.],
   outlined: false,
-  placement: auto,
+  placement: none,
   gap: 0em,
 ) <maritime_fold_schematic>
 
@@ -280,56 +280,83 @@ The corresponding per-category population breakdown across fold and subregion fo
   image("figs/maritime_folds_3d.png", width: 100%),
   caption: [3D render of the Maritime Museum fold allocation.],
   outlined: false,
-  placement: auto,
+  placement: none,
   gap: 0em,
 ) <maritime_folds_3d>
 
 
 #figure(
-table(
-  columns: 8,
-  // Header row
-  [], [Fold 1], [Fold 2], [Region 2], [Region 3], [Fold 3], [Region 4], [Region 5],
-  // Data rows
-  [1_WALL], [58.6%], [20.9%], [8.6%], [12.3%], [20.6%], [12.6%], [7.9%],
-  [2_FLOOR], [65.6%], [20.2%], [8.3%], [12.0%], [14.2%], [9.8%], [4.4%],
-  [3_ROOF], [55.7%], [25.5%], [15.2%], [10.3%], [18.9%], [9.5%], [9.4%],
-  [4_CEILING], [62.3%], [21.4%], [9.1%], [12.4%], [16.3%], [9.6%], [6.7%],
-  [5_FOOTPATH], [59.3%], [17.5%], [5.7%], [11.8%], [23.2%], [12.1%], [11.1%],
-  [6_GRASS], [45.8%], [20.5%], [11.1%], [9.4%], [33.7%], [14.9%], [18.8%],
-  [7_COLUMN], [44.9%], [18.1%], [11.7%], [6.5%], [37.0%], [19.3%], [17.7%],
-  [8_DOOR], [52.8%], [23.4%], [7.5%], [15.9%], [23.8%], [15.5%], [8.4%],
-  [9_WINDOW], [47.7%], [29.6%], [10.7%], [18.9%], [22.7%], [13.4%], [9.3%],
-  [10_STAIR], [62.2%], [22.5%], [10.2%], [12.3%], [15.3%], [9.8%], [5.5%],
-  [11_RAILING], [66.2%], [16.8%], [4.4%], [12.4%], [17.0%], [13.2%], [3.8%],
-  [13_OTHER], [58.2%], [23.9%], [13.1%], [10.8%], [17.9%], [9.8%], [8.2%],
-),
-caption: [Per-category population allocation per-fold and per-subregion for Maritime Museum.],
-placement: auto,
-) <maritime_category_table>
+  table(
+    columns: 4,
+    align: left,
+    // Header row
+    [Category], [Fold 1], [Fold 2], [Fold 3],
+    // Data rows
+    [1_WALL], [58.6%], [20.9%], [20.6%],
+    [2_FLOOR], [65.6%], [20.2%], [14.2%],
+    [3_ROOF], [55.7%], [25.5%], [18.9%],
+    [4_CEILING], [62.3%], [21.4%], [16.3%],
+    [5_FOOTPATH], [59.3%], [17.5%], [23.2%],
+    [6_GRASS], [45.8%], [20.5%], [33.7%],
+    [7_COLUMN], [44.9%], [18.1%], [37.0%],
+    [8_DOOR], [52.8%], [23.4%], [23.8%],
+    [9_WINDOW], [47.7%], [29.6%], [22.7%],
+    [10_STAIR], [62.2%], [22.5%], [15.3%],
+    [11_RAILING], [66.2%], [16.8%], [17.0%],
+    [13_OTHER], [58.2%], [23.9%], [17.9%],
+  ),
+  caption: [Per-category population allocation per fold for Maritime Museum.],
+  placement: none,
+) <maritime_fold_allocation_table>
 
 
-#set table(
-  stroke: none,
-  gutter: 0.1em,
-  fill: (x, y) =>
-    if x == 0 or y == 0 { black } else { none },
-  inset: (left: 0.5em, right: 0.5em),
-)
-#show table.cell: it => {
-  if it.x == 0 or it.y == 0 {
-    set text(white)
-    strong(it)
-  } else {
-    it
-  }
-}
+#figure(
+  table(
+    columns: 5,
+    align: left,
+    // Header row
+    [Category], [Fold 2 - Region 2], [Fold 2 - Region 3], [Fold 3 - Region 4], [Fold 3 - Region 5],
+    // Data rows
+    [1_WALL], [8.6%], [12.3%], [12.6%], [7.9%],
+    [2_FLOOR], [8.3%], [12.0%], [9.8%], [4.4%],
+    [3_ROOF], [15.2%], [10.3%], [9.5%], [9.4%],
+    [4_CEILING], [9.1%], [12.4%], [9.6%], [6.7%],
+    [5_FOOTPATH], [5.7%], [11.8%], [12.1%], [11.1%],
+    [6_GRASS], [11.1%], [9.4%], [14.9%], [18.8%],
+    [7_COLUMN], [11.7%], [6.5%], [19.3%], [17.7%],
+    [8_DOOR], [7.5%], [15.9%], [15.5%], [8.4%],
+    [9_WINDOW], [10.7%], [18.9%], [13.4%], [9.3%],
+    [10_STAIR], [10.2%], [12.3%], [9.8%], [5.5%],
+    [11_RAILING], [4.4%], [12.4%], [13.2%], [3.8%],
+    [13_OTHER], [13.1%], [10.8%], [9.8%], [8.2%],
+  ),
+  caption: [Per-category population allocation per subregion for Maritime Museum.],
+  placement: none,
+) <maritime_subregion_allocation_table>
+
+
+
+// #set table(
+//   stroke: none,
+//   gutter: 0.1em,
+//   fill: (x, y) =>
+//     if x == 0 or y == 0 { black } else { none },
+//   inset: (left: 0.5em, right: 0.5em),
+// )
+// #show table.cell: it => {
+//   if it.x == 0 or it.y == 0 {
+//     set text(white)
+//     strong(it)
+//   } else {
+//     it
+//   }
+// }
 
 #figure(
   image("figs/fold_allocation_schematic_rog_south.png", width: 100%),
   caption: [Mesh partitioning schematic for the Royal Observatory South site.],
   outlined: true,
-  placement: auto,
+  placement: none,
   gap: 0em,
 ) <rog_south_fold_schematic>
 
@@ -337,33 +364,110 @@ placement: auto,
   image("figs/rog_south_folds_3d.png", width: 100%),
   caption: [3D render of the Royal Observatory South fold allocation.],
   outlined: false,
-  placement: auto,
+  placement: none,
   gap: 0em,
 ) <rog_south_folds_3d>
 
 
 #figure(
   table(
-    columns: 8,
+    columns: 4,
+    align: left,
     // Header row
-    [], [Fold 1], [Fold 2], [Region 2], [Region 3], [Fold 3], [Region 4], [Region 5],
+    [Category], [Fold 1], [Fold 2], [Fold 3],
     // Data rows
-    [1_WALL], [46.6%], [25.7%], [14.9%], [10.8%], [27.7%], [11.0%], [16.7%],
-    [2_FLOOR], [49.5%], [20.5%], [13.7%], [6.9%], [30.0%], [9.0%], [21.0%],
-    [3_ROOF], [35.3%], [22.2%], [19.0%], [3.2%], [42.5%], [19.4%], [23.1%],
-    [4_CEILING], [62.2%], [17.9%], [12.1%], [5.8%], [20.0%], [6.9%], [13.1%],
-    [5_FOOTPATH], [45.6%], [17.5%], [10.3%], [7.3%], [36.9%], [20.8%], [16.1%],
-    [7_COLUMN], [26.0%], [27.2%], [18.0%], [9.3%], [46.8%], [27.4%], [19.4%],
-    [8_DOOR], [48.2%], [21.7%], [14.4%], [7.3%], [30.1%], [3.9%], [26.2%],
-    [9_WINDOW], [35.9%], [29.5%], [20.3%], [9.2%], [34.6%], [7.5%], [27.1%],
-    [10_STAIR], [46.4%], [44.0%], [23.0%], [20.9%], [9.7%], [6.6%], [3.1%],
-    [11_RAILING], [39.0%], [37.0%], [14.9%], [22.1%], [24.0%], [15.1%], [8.9%],
-    [12_RWP], [39.9%], [30.2%], [18.8%], [11.4%], [29.9%], [6.8%], [23.1%],
-    [13_OTHER], [50.0%], [23.2%], [17.3%], [5.9%], [26.8%], [7.6%], [19.3%],
+    [1_WALL], [46.6%], [25.7%], [27.7%],
+    [2_FLOOR], [49.5%], [20.5%], [30.0%],
+    [3_ROOF], [35.3%], [22.2%], [42.5%],
+    [4_CEILING], [62.2%], [17.9%], [20.0%],
+    [5_FOOTPATH], [45.6%], [17.5%], [36.9%],
+    [7_COLUMN], [26.0%], [27.2%], [46.8%],
+    [8_DOOR], [48.2%], [21.7%], [30.1%],
+    [9_WINDOW], [35.9%], [29.5%], [34.6%],
+    [10_STAIR], [46.4%], [44.0%], [9.7%],
+    [11_RAILING], [39.0%], [37.0%], [24.0%],
+    [12_RWP], [39.9%], [30.2%], [29.9%],
+    [13_OTHER], [50.0%], [23.2%], [26.8%],
   ),
-  caption: [Per-category population allocation per-fold and per-subregion for ROG South.],
-  placement: auto,
+  caption: [Per-category population allocation per fold for ROG South.],
+  placement: none,
 ) <rog_south_category_table>
+
+
+#figure(
+  table(
+    columns: 5,
+    align: left,
+    // Header rows
+    [Category], [Fold 2 - Region 2], [Fold 2 - Region 3], [Fold 3 - Region 4], [Fold 3 - Region 5],
+    // Data rows
+    [1_WALL], [14.9%], [10.8%], [11.0%], [16.7%],
+    [2_FLOOR], [13.7%], [6.9%], [9.0%], [21.0%],
+    [3_ROOF], [19.0%], [3.2%], [19.4%], [23.1%],
+    [4_CEILING], [12.1%], [5.8%], [6.9%], [13.1%],
+    [5_FOOTPATH], [10.3%], [7.3%], [20.8%], [16.1%],
+    [7_COLUMN], [18.0%], [9.3%], [27.4%], [19.4%],
+    [8_DOOR], [14.4%], [7.3%], [3.9%], [26.2%],
+    [9_WINDOW], [20.3%], [9.2%], [7.5%], [27.1%],
+    [10_STAIR], [23.0%], [20.9%], [6.6%], [3.1%],
+    [11_RAILING], [14.9%], [22.1%], [15.1%], [8.9%],
+    [12_RWP], [18.8%], [11.4%], [6.8%], [23.1%],
+    [13_OTHER], [17.3%], [5.9%], [7.6%], [19.3%],
+  ),
+  caption: [Per-category population allocation per subregion for ROG South.],
+  placement: none,
+) <rog_south_subregion_allocation_table>
+
+
+#pagebreak()
+=== Pseudo-code description of algorithm.
+```
+For iteration = 1 to iterations:
+    Initialize an empty grid of size grid_size_y x grid_size_x
+    Reset counts for all folds and regions
+
+    // Seed Initialization:
+    Select random populated cells as seed cells for each region
+    Assign seed cells to their respective regions in the grid
+    Update counts and bounding boxes for regions and folds
+
+    // Priority Queue Initialization:
+    Initialize a priority queue (min-heap) for cell expansion
+    For each seed cell:
+        Get its unassigned neighbors
+        Compute priority for each neighbor
+        Add neighbors to the priority queue
+
+    // Region Growing:
+    While the priority queue is not empty:
+        Pop the cell with the highest priority
+        If the cell is unassigned:
+            Assign the cell to the corresponding region
+            Update counts and bounding boxes
+            Get unassigned neighbors of the cell
+            Compute priority for each neighbor
+            Add neighbors to the priority queue
+
+    // Assign Unallocated Cells:
+    For each unassigned cell in the grid:
+        Find the nearest assigned neighbor or closest region
+        Assign the cell to that region
+        Update counts and bounding boxes
+
+    // Compute Equality Score:
+    Compute total penalty based on:
+        - Deviation from intended total counts
+        - Deviation from intended region sizes
+        - Underrepresented categories
+        - Region aspect ratios
+
+    // Update Best Configuration:
+    If current equality score < best equality score:
+        Update best equality score
+        Save current grid configuration as best
+
+  Store seed configurations for uniqueness analysis
+```
 
 #pagebreak()
 == Library Data Scene Construction
@@ -371,7 +475,9 @@ An issue with the raw library data is that each category of HBIM components is p
 This results in an over-clustering of objects within the same category, causing the network to potentially overfit by learning to group proximate objects too strongly in the classification.
 Additionally, the isolation of each sample means that the network's receptive field would predominantly encounter only one category at a time, which can lead to significant issues with stability and convergence during training, as the model lacks exposure to diverse category interactions within the same scene.
 
-To mitigate this, the library component meshes were divided into small 2.5m² cells, which were then randomly sorted per category. From this set, 15% of the cells were allocated to the evaluation sample, 20% to the testing sample, and 65% to the training sample. To further ensure variability, each sample was randomly shuffled, and the cells were recombined in a spiral pattern to construct more compact and diverse scenes.
+To mitigate this, a bespoke algorithm employing the VTK library functionality was deployed to randomly splice and rejoin the library scene to attain a more locally diverse scene.
+The library component meshes were divided into small 2.5m² cells, which were then randomly sorted per category.
+From this set, 15% of the cells were allocated to the evaluation sample, 20% to the testing sample, and 65% to the training sample. To further ensure variability, each sample was randomly shuffled, and the cells were recombined in a spiral pattern to construct more compact and diverse scenes.
 The resulting training set is shown in @library_scene.
 
 #figure(
@@ -637,6 +743,13 @@ TODO
 
 
 = Experimental Setup
+
+== Hardware/Software setup
+The experiments were carried out on a machine with a 6-core processor, 32GB of RAM, and a 24GB VRAM RTX4090.
+The sole exception to this is the experiment using the smaller library scene, which was carried out on a similar machine with a 12GB VRAM RTX4070.
+The software platform used was Arch Linux, running the recent CUDA 12.6.
+A docker container can be used to replicate the training environment precisely.
+
 == Training and Evaluation Phase
 A series of train-time transforms are utilised to help prevent overfitting and ensure VRAM constraints are respected, described below:
 
@@ -708,12 +821,8 @@ The more performant of the real-site experiments then had its training re-run, b
 A model was also tested on a site it had not see at all, to test the ability to generalise when using such small training data sets.
 Finally, inference on a real LiDAR cloud of the Queens House site was run using the most performant model.
 
-
 == Intra-site experiments
 Each of these experiments refer to a model that was trained and tested on the same site/sites.
-
-The library experiment was performed on a single 12GB VRAM RTX4070, on a machine with 32GB of RAM.
-All other experiments were performed on a single 24GB VRAM RTX4090, on a machine with 32GB of RAM.
 
 === Library Scene
 The experiment training on just the HBIM library scenes functions as a metric for how distinguishable the different category geometries are in isolation.
