@@ -1275,8 +1275,43 @@ Therefore, a relatively minor adjustment to the data ingestion pipeline could en
 By enabling color to complement geometry, the network's segmentation accuracy across challenging classes could be significantly enhanced.
 
 == Custom Loss Functions <customloss>
+the implementation of a loss function incorporating explicit class weights could be explored to differentiate the severity of classification errors based on both class and error type.
+This approach would allow for the punishment of misclassifications to vary depending on the specific classes involved; for example, erroneously identifying a "roof" as a "wall" would be penalized more heavily than misclassifying "grass" as a "footpath." Additionally, imposing stringent penalties on the misattribution of cardinal classes to the "other" category would encourage the network to adopt a more conservative approach when predicting "other."
+This would ensure that such predictions are made only when the network achieves a high level of certainty, thereby enhancing the precision of class-specific predictions and reducing the likelihood of ambiguous classifications.
+By tailoring the loss function in this manner, the overall robustness and reliability of the model could be significantly improved, leading to more accurate and trustworthy outcomes in diverse classification scenarios.
+
+== Threshold-Based Prediction Strategies
+As an alternative to a conventional softmax approach, alternative prediction strategies beyond the conventional argmax approach could be explored to enhance classification accuracy.
+Specifically, the implementation of post-hoc thresholds for the "other" class might be considered.
+This method would involve assigning a prediction of "other" only when the probabilities of all other classes fall below a predefined threshold, and conversely, ensuring that the "other" class probability is sufficiently high.
+In instances where these conditions are not met, the model could default to selecting the class with the second-highest probability.
+
+While this thresholding technique offers a potential avenue for refining predictions, it may introduce a degree of brittleness and rely on additional statistical heuristics.
+Therefore, it is acknowledged that more robust and sophisticated methods could be developed to address classification challenges at their core.
+Nonetheless, experimenting with threshold-based approaches could provide valuable insights and serve as a supplementary mechanism to improve the model's decision-making process in specific scenarios.
 
 == Refactoring the "Other" Category
+
+=== N-1 Classification Approach
+
+An alternative approach to handling the "other" category involves transforming the classification problem from an N-class to an N-1 class scenario by removing the explicit "other" category.
+This modification necessitates altering the network's output layers to abandon the prediction of explicit class probabilities that sum to one. Instead, an element-wise sigmoid output layer could be employed, allowing the model to predict independent scores between zero and one for each cardinal class.
+In this paradigm, predictions of "other" would be defined as instances where the scores of all other classes fall below a predetermined threshold.
+Conversely, if the "other" class score is sufficiently high, it would be selected as the prediction. In cases where these threshold conditions are not met, the model would default to selecting the class with the second-highest probability.
+Although this method offers a means to circumvent the ambiguous semantics of the "other" label within the PPT module, it may introduce complexity and rely on additional heuristics.
+Consequently, more robust and sophisticated techniques are recommended to address the underlying classification challenges directly rather than implementing workaround solutions.
+
+=== Language Semantic Augmentation
+
+The inherent semantic ambiguity of the "other" category, coupled with the interplay between label CLIP embeddings and PTv3 latent representations, presents significant challenges.
+The language embeddings associated with "other" are likely to be non-contributory or potentially detrimental to accurate classification.
+To mitigate this issue, the introduction of more granular information regarding the "other" category at a coarse textual level is proposed.
+For instance, providing summaries of the contents encompassed by "other" within a specific dataset—such as "shelves" or "machinery" - could help resolve label degeneracy by enhancing the PPT categorical alignment module with embeddings of these finer-grained labels.
+
+Additionally, the network's loss function would require careful modification to accommodate this refined labeling, as point-level labels would remain under the broader "other" category without distinguishing between the distinct subclasses.
+This enhancement could be achieved manually or delegated to a Vision-Language Model (VLM), which might be trained to analyze static images of "other" regions within the input cloud and generate descriptive labels for the objects constituting the "other" class.
+By explicitly incorporating more detailed semantic information, the model's ability to accurately classify and differentiate between various objects within the "other" category could be substantially improved, thereby enhancing overall classification performance and reliability.
+
 
 #pagebreak()
 #bibliography("bibliography.bib")
