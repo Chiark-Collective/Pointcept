@@ -621,7 +621,7 @@ TODO
 
 #figure(
   image("figs/ppt_1.png", width: 100%),
-  caption: [PPT 1],
+  caption: [Schematic from Ref. @wu2024ppt of the high-level design of the PPT module. Domain prompt adapters are learnable layers injected into a frozen segmentation backone network and allow it to adapt to the distributional qualities of distinct datasets, while categorical alignment replaces a fixed classification head with a label embedding-based alternative logit computation. This has the nice property of permitting zero-shot inference by providing a metric between correlated label categories.],
   outlined: false,
   placement: none,
   gap: 1em,
@@ -629,7 +629,7 @@ TODO
 
 #figure(
   image("figs/ppt_2.png", width: 100%),
-  caption: [PPT2],
+  caption: [Schematic from Ref. @wu2024ppt of the two main components of PPT in the network. Prompt-driven normalisation modules injected into the PTv3 backbone layers permits learning a lightweight dataset-specific feature rescaling. The language-guided categorical alignment module projects the point representations from the backbone into the space of the class-label CLIP embedding vectors and computes logits from their inner product.],
   outlined: false,
   placement: none,
   gap: 1em,
