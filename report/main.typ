@@ -424,7 +424,7 @@ order. This large patch size is a key advancement - previous architectures like 
 16 points in their local attention windows due to computational constraints. The efficient serialization 
 approach enables this dramatic expansion of the receptive field.
 
-Receptive Field and Multi-Scale Processing
+=== Receptive Field and Multi-Scale Processing
 
 The network processes point clouds at multiple scales through its U-Net structure. At each encoder stage, 
 grid pooling downsamples the points by a factor of 2, effectively doubling the spatial extent that each 
@@ -437,7 +437,7 @@ helps recover and understand spatial patterns at different scales. The four diff
 patterns provide different perspectives on these spatial relationships, with the shuffle mechanism 
 ensuring the model doesn't become overly reliant on any single pattern.
 
-Network Architecture and Data Flow
+=== Network Architecture and Data Flow
 
 PTv3 processes point clouds through initialization followed by encoder stages:
 
@@ -487,7 +487,7 @@ The feature dimensions follow a [64→128→256→512] pattern through the encod
 
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
 
-Results
+=== Results
 
 The architecture achieves significant efficiency improvements over its predecessor PTv2:
 
@@ -503,7 +503,7 @@ Waymo object detection (2-frame): 72.5%/72.1% mAP/APH for vehicles, 77.6%/74.5% 
 
 With multi-dataset joint training, these results improve further, demonstrating the architecture's ability to leverage larger-scale training effectively.
 
-Impact
+=== Impact
 
 PTv3 shows that simplifying architecture design while focusing on scalability can lead to superior performance without sacrificing accuracy. Its reduced computational requirements make high-performance point cloud processing more practical for real-world applications, while its ability to leverage larger-scale training through multi-dataset approaches points to promising future developments in the field.
 The success of PTv3 challenges the notion that increasing architectural complexity is necessary for improved performance, suggesting instead that thoughtful simplification enabling better scaling might be a more productive direction for future research.
