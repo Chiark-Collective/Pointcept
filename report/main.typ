@@ -610,6 +610,14 @@ using the space-filling curve mapping function.
 Points are then sorted according to these indices, forming an ordered sequence in which they retain 
 their original features (RGB values and surface normals).
 
+#figure(
+  image("figs/sf_curve_serialisation.png", width: 100%),
+  caption: [Illustration of serialisation along the four distinct space-filling curves from Ref. @wu2024ptv3],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <sf_curve_serialisation>
+
 This process inevitably loses some precise spatial information. For example, two points that are close in 
 3D space might end up with quite different sequence indices if they fall on opposite sides of a 
 space-filling curve boundary. However, PTv3's use of multiple serialization patterns helps mitigate this: 
@@ -629,8 +637,8 @@ approach enables this dramatic expansion of the receptive field.
 === Receptive Field and Multi-Scale Processing
 
 The network processes point clouds at multiple scales through its U-Net structure. At each encoder stage, 
-grid pooling downsamples the points by a factor of 2, effectively doubling the spatial extent that each 
-point represents. Combined with the large 1024-point patches, this means that deeper layers in the network 
+grid pooling downsamples the points by a factor of 2, effectively doubling the receptive field. Combined 
+with the large 1024-point patches, this means that deeper layers in the network 
 can view increasingly large spatial contexts.
 
 This multi-scale approach works in concert with the serialization strategy. While serialization might 
@@ -686,11 +694,15 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 
 The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
 
+#figure(
+  image("figs/ptv3_1.png", width: 100%),
+  caption: [PTv3 encoder structure described in Ref. @wu2024ptv3],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <ptv3_encoder>
+
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
-
-=== Point Prompt Training (PPT) module
-
-TODO
 
 === Architecture Performance
 
@@ -709,7 +721,27 @@ With multi-dataset joint training, these results improve further, demonstrating 
 PTv3 shows that simplifying architecture design while focusing on scalability can lead to superior performance without sacrificing accuracy. Its reduced computational requirements make high-performance point cloud processing more practical for real-world applications, while its ability to leverage larger-scale training through multi-dataset approaches points to promising future developments in the field.
 The success of PTv3 challenges the notion that increasing architectural complexity is necessary for improved performance, suggesting instead that thoughtful simplification enabling better scaling might be a more productive direction for future research.
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+=== Point Prompt Training (PPT) module
+
+TODO
+
+#figure(
+  image("figs/ppt_1.png", width: 100%),
+  caption: [PPT 1],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <ppt_1>
+
+#figure(
+  image("figs/ppt_2.png", width: 100%),
+  caption: [PPT2],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <ppt_2>
+
+
 = Experimental Setup
 
 == Hardware/Software setup
