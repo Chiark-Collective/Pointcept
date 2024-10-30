@@ -387,6 +387,127 @@ TODO: this section will explain the experimental setup that was used across the 
 
 == PTv3 backbone
 
+Processing point clouds presents unique challenges compared to structured data like images. 
+While images come with an inherent grid structure, point clouds are unordered sets of points in 3D space. 
+This unstructured nature has traditionally forced architectures to use computationally expensive 
+operations to understand spatial relationships between points, with operations like K-nearest neighbors 
+(KNN) consuming up to 28% of forward processing time in previous architectures.
+
+PTv3's key insight is that model performance is more influenced by scale than intricate design details. 
+Rather than maintaining strict permutation invariance through complex operations, PTv3 imposes structure 
+on point clouds through serialization using space-filling curves. Specifically, it employs four 
+patterns: Z-order, Trans Z-order, Hilbert, and Trans Hilbert curves, where the "Trans" variants alter 
+the axis traversal order.
+
+The serialization process works by transforming 3D point coordinates into 1D sequence indices:
+
+First, point positions are quantized by dividing by a grid size g and rounding down: ⌊p/g⌋, effectively 
+snapping points to a discrete grid. These discrete coordinates are then mapped to a single integer index 
+using the space-filling curve mapping function.
+
+Points are then sorted according to these indices, forming an ordered sequence in which they retain 
+their original features (RGB values and surface normals).
+
+This process inevitably loses some precise spatial information. For example, two points that are close in 
+3D space might end up with quite different sequence indices if they fall on opposite sides of a 
+space-filling curve boundary. However, PTv3's use of multiple serialization patterns helps mitigate this: 
+points that end up far apart in one pattern's sequence might be closer in another's.
+
+The serialization approach offers a crucial efficiency advantage: it eliminates the need for expensive KNN 
+operations by imposing a structured ordering on the points. However, this comes with a potential trade-off 
+in spatial relationship accuracy compared to exact neighbour search methods. PTv3's insight is that this 
+trade-off becomes negligible when combined with multiple serialization patterns and sufficient scaling of 
+the model's receptive field. 
+
+After serialization, points are grouped into non-overlapping patches of 1024 points along the serialized 
+order. This large patch size is a key advancement - previous architectures like PTv2 were limited to just 
+16 points in their local attention windows due to computational constraints. The efficient serialization 
+approach enables this dramatic expansion of the receptive field.
+
+Receptive Field and Multi-Scale Processing
+
+The network processes point clouds at multiple scales through its U-Net structure. At each encoder stage, 
+grid pooling downsamples the points by a factor of 2, effectively doubling the spatial extent that each 
+point represents. Combined with the large 1024-point patches, this means that deeper layers in the network 
+can view increasingly large spatial contexts.
+
+This multi-scale approach works in concert with the serialization strategy. While serialization might 
+lose some precise local spatial relationships, the hierarchical processing through the U-Net structure 
+helps recover and understand spatial patterns at different scales. The four different serialization 
+patterns provide different perspectives on these spatial relationships, with the shuffle mechanism 
+ensuring the model doesn't become overly reliant on any single pattern.
+
+Network Architecture and Data Flow
+
+PTv3 processes point clouds through initialization followed by encoder stages:
+
+1. Initialization
+
+  Input point cloud is first serialized using one of the four patterns (Z-order, Trans Z-order, Hilbert, or Trans Hilbert)
+  These space-filling curves map 3D coordinates to 1D sequences while preserving some degree of spatial locality
+  An embedding layer maps the input features to the initial channel dimension
+
+2. Encoder Processing
+
+  Grid pooling downsamples points while increasing feature dimensionality
+  The "Shuffle Orders" mechanism randomly varies which serialization pattern will be used for the next block
+  This variation means points that are separated in one pattern might be grouped together in another, enabling 
+  information flow across the point cloud without expensive shift or dilation operations
+  Points are then processed through multiple blocks (depths [2,2,6,2] across each of the four encoder stages)
+
+
+3. Block Structure
+  Each block with an encoder stage processes points through:
+
+  xCPE (enhanced Conditional Positional Encoding):
+
+  Implemented as a sparse convolution layer with skip connection
+  The sparse convolution operates on local neighborhoods defined by the voxel grid. This provides each point 
+  with information about its position relative to nearby points.
+  Unlike traditional relative positional encoding that requires computing pairwise distances (26% of forward time in PTv2), xCPE achieves similar goals through efficient sparse operations
+
+  LayerNorm:
+
+  Normalizes features independently for each point, maintaining consistent scales throughout the network
+  Computes the mean and standard deviation across feature dimensions, then normalizes and applies learned scaling and offset parameters
+  Critical for stable training in deep networks, particularly with attention mechanisms
+  Used both before and after attention to ensure properly scaled features 
+  Works well with variable batch sizes and sequence lengths, making it ideal for point cloud processing where input sizes can vary
+
+  Self-attention:
+
+  Points are grouped into non-overlapping patches of 1024 points along the serialized order
+  Each patch processes independently through standard query-key-value attention
+  The large patch size (vs PTv2's 16 points) is made possible by the efficiency gains from serialization
+
+  MLP layer for feature transformation
+
+
+The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
+
+This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
+
+Results
+
+The architecture achieves significant efficiency improvements over its predecessor PTv2:
+
+3.3× faster inference speed
+10.2× lower memory consumption
+Expansion of receptive field from 16 to 1024 points while maintaining efficiency
+
+State-of-the-art performance across key benchmarks:
+
+Indoor semantic segmentation: 79.4% mIoU on ScanNet test set
+Outdoor semantic segmentation: 83.0% mIoU on nuScenes test set, 75.5% mIoU on SemanticKITTI test set
+Waymo object detection (2-frame): 72.5%/72.1% mAP/APH for vehicles, 77.6%/74.5% mAP/APH for pedestrians
+
+With multi-dataset joint training, these results improve further, demonstrating the architecture's ability to leverage larger-scale training effectively.
+
+Impact
+
+PTv3 shows that simplifying architecture design while focusing on scalability can lead to superior performance without sacrificing accuracy. Its reduced computational requirements make high-performance point cloud processing more practical for real-world applications, while its ability to leverage larger-scale training through multi-dataset approaches points to promising future developments in the field.
+The success of PTv3 challenges the notion that increasing architectural complexity is necessary for improved performance, suggesting instead that thoughtful simplification enabling better scaling might be a more productive direction for future research.
+
 == Point Prompt Training
 
 == Training and Evaluation Phase
