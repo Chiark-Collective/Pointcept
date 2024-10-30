@@ -217,6 +217,14 @@ A concern raised in this approach is that stripping the building elements of the
   gap:1em,
 ) <library_raw>
 
+== RGB information
+The exported HBIM meshes as supplied were largely lacking in texture information, with only sparse external textures supplied.
+This may imply that some textures that were externally linked by the meshes were not included when exported.
+
+The model contains simple RBG colour information, with mesh faces being monochromatic with a simplified colour scheme.
+As such, the very limited number of elements with textural information had that information removed so that the model did not use the presence or absence of fine
+colour detail to distinguish categories.
+
 == Taxonomy
 The previous project highlighted several challenges that arise when using a taxonomy that is too finely segmented. Overly detailed class distinctions led to difficulties in classification, as certain categories became too similar to differentiate effectively. This fine segmentation not only increased the complexity of the model but also introduced issues of class imbalance, where some highly specific categories had insufficient representation. The segmentation of similar elements at high levels of granularity resulted in confusion and poor performance in those classes. These challenges motivated the decision to adopt a simpler, more generalized taxonomy, reducing ambiguity between categories and improving overall model stability and performance. 
 
@@ -487,14 +495,6 @@ The resulting training set is shown in @library_scene.
   placement: none,
   gap: 1em,
 ) <library_scene>
-
-== RGB information
-The exported HBIM meshes as supplied were largely lacking in texture information, with only sparse external textures supplied.
-This may imply that some textures that were externally linked by the meshes were not included when exported.
-
-The model contains simple RBG colour information, with mesh faces being monochromatic with a simplified colour scheme.
-As such, the very limited number of elements with textural information had that information removed so that the model did not use the presence or absence of fine
-colour detail to distinguish categories.
 
 == Point Cloud Generation
 The input meshes are used to sample point clouds for use as input into the network's training.
