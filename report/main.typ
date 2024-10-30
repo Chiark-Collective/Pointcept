@@ -902,8 +902,6 @@ The major 2 issues visible, that occur across the QH subsamples, are the followi
 - walls are frequently misidentified as Other features.
 - Flat surfaces like roofs, floors, and ceiling, are frequently misidentified as footpaths.
 
-For the former issue, there are several possible avenues to improve performance.
-
 #figure(
   image("figs/qh1.png", width: 89%),
   caption: [Model predictions for an exterior section of the Queens House. The most obvious classification errors present are walls being misidentified as Other features.
@@ -913,9 +911,45 @@ For the former issue, there are several possible avenues to improve performance.
   gap: 1em,
 ) <qh1>
 
+For the former issue, there are several possible explanations for this, and ways to improve upon the approach.
+The most obvious issue is that for this model, a great many features classes as Other resemble walls (or could indeed be perceived by 
+a person as a wall of some kind).
+A render of the Other mesh category for Maritime Museum is shown in @mm_other.
+
+#figure(
+  image("figs/mm_other_meshes.png", width: 89%),
+  caption: [Render of the meshes designated "Other" in the Maritime Museum HBIM data. A great many of these structures are geometrically very similar to walls.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <mm_other>
+
+Given how many of these museum plinths, boundaries, and infrastructural elements are very distinctly similar to walls, the model's poor resolution between Wall and Other
+is not too surprising.
+An obvious way to address this would be to incorporate more sites in the training such that the network can be exposed to more miscellaneous structures.
+
+Other avenues of possible improvement include refinements of the loss function used in the network's training (see @customloss).
+Another is to incorporate the library scene to more strictly reinforce the expected geometrical differences within Other.
+
+The second dominant error that can be seen in the visualisations, the miscategorisation as footpath of other flat surface categories, can be likely improved
+dramatically by the inclusion of more complex colour information and texturing.
+This was verified by converting the RGB information on the QH data into a grayscale colourspace by using the luminence formula.
+It could be observed that the network's output barely changed at all without colour information present in the input data, meaning that
+the network is very likely not deriving much useful information from colour when distinguishing most cateogories.
+
+It should be noted that the RGB data present in the HBIM meshes is sometimes a very useful discriminator, as is the case for grass
+which is always uniquely coloured green in the training data, and is generally well identified relative to the other flat surface 
+categories.
+For all of these reasons, capturing the genuine colour and texture information of the real sites in our HBIM data is a very compelling next step
+for improving the network's performance on flat surfaces more generally.
+
+Despite these two very significant types of error observed in the model predictions, there are some positives to take away from this limited test.
+As demonstrated in @qh2 and @qh3, the model is already relatively adept at classifying structures that are geometrically distinct, like columns and stairs.
+For a model trained on such a finite amount of data, this is a very encouraging result.
+
 #figure(
   image("figs/qh2.png", width: 89%),
-  caption: [Model predictions for an exterior section of the Queens House. ],
+  caption: [Model predictions for an exterior section of the Queens House. The columns supporting the covered walkway are fairly well identified by the model.],
   outlined: false,
   placement: none,
   gap: 1em,
@@ -923,7 +957,7 @@ For the former issue, there are several possible avenues to improve performance.
 
 #figure(
   image("figs/qh3.png", width: 89%),
-  caption: [Model predictions for an exterior section of the Queens House. ],
+  caption: [Model predictions for an interior section of the Queens House. The stairway in the center of the image is very well resolved from the surrounding elements.],
   outlined: false,
   placement: none,
   gap: 1em,
