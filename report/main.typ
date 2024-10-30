@@ -380,6 +380,37 @@ The resulting training set is shown in @library_scene.
   gap: 1em,
 ) <library_scene>
 
+== RGB information
+The exported HBIM meshes as supplied were largely lacking in texture information, with only sparse external textures supplied.
+This may imply that some textures that were externally linked by the meshes were not included when exported.
+
+The model contains simple RBG colour information, with mesh faces being monochromatic with a simplified colour scheme.
+As such, the very limited number of elements with textural information had that information removed so that the model did not use the presence or absence of fine
+colour detail to distinguish categories.
+
+== Point Cloud Generation
+The input meshes are used to sample point clouds for use as input into the network's training.
+In the previous project, manual generation of pointclouds using CloudCompare's user interface was required, necessitating considerable manual work.
+This required an extremely fine sampling of points such that voxelisation could be used with PDAL to the required resolution.
+
+This process has been automated with a new pipeline built in VTK, allowing the mesh files exported from the HBIM data to be directly fed into the framework.
+The meshes are exported to Stanford File Format, and then fed into the fold allocation algorithm.
+The algorithm splits the meshes themselves directly, allowing for quick sampling of training, testing, and evaluation scenes at any required resolution.
+
+The sampling algorithm uses the `vtkPolyDataSampler` to perform an initial sampling of the mesh, creating a relatively uniform output according to the required
+sampling density.
+The algorithm interpolates the color and normal information from the relevant mesh surfaces and vertices to the samples points.
+Some surfaces can be sampled more densely than others, so the clean up the output one of two algorithms can be run to ensure a uniform point distribution:
+- `vtkPoissonDiskSampler` - uses a "dart throwing" algorithm that iteratively places points on a surface, ensuring each new point maintains a minimum distance from others, creating a uniform, evenly spaced distribution.
+- `vtkVoxelGrid` - subdivides 3D space into a grid of equally sized voxels, then replaces all points within each voxel with a single representative point, creating a uniformly downsampled point cloud.
+
+Given the points are fed into a grid voxelisation filter as part of the network, we chose the simpler `vtkPoissonDiskSampler` to ensure an even point distribution
+between mesh faces.
+
+The point clouds generated in this way are ready to be used in the network.
+Our pipeline is capable of producing PyTorch state dictionaries containing the point cloud information for direct use as network input, or as `.las` files that
+leverage the las format's compression and ease of visualisation in external programs like CloudCompare.
+
 // #pagebreak()
 = PTv3 with PPT
 
@@ -500,33 +531,29 @@ The feature dimensions follow a [64→128→256→512] pattern through the encod
 
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
 
-== Point Prompt Training (PPT) module
+=== Point Prompt Training (PPT) module
 
 TODO
 
-=== Results
+=== Architecture Performance
 
 The architecture achieves significant efficiency improvements over its predecessor PTv2:
-
-3.3× faster inference speed
-10.2× lower memory consumption
-Expansion of receptive field from 16 to 1024 points while maintaining efficiency
+- 3.3× faster inference speed.
+- 10.2× lower memory consumption.
+- expansion of receptive field from 16 to 1024 points while maintaining efficiency.
 
 State-of-the-art performance across key benchmarks:
-
-Indoor semantic segmentation: 79.4% mIoU on ScanNet test set
-Outdoor semantic segmentation: 83.0% mIoU on nuScenes test set, 75.5% mIoU on SemanticKITTI test set
-Waymo object detection (2-frame): 72.5%/72.1% mAP/APH for vehicles, 77.6%/74.5% mAP/APH for pedestrians
+- Indoor semantic segmentation: 79.4% mIoU on ScanNet test set
+- Outdoor semantic segmentation: 83.0% mIoU on nuScenes test set, 75.5% mIoU on SemanticKITTI test set
+- Waymo object detection (2-frame): 72.5%/72.1% mAP/APH for vehicles, 77.6%/74.5% mAP/APH for pedestrians
 
 With multi-dataset joint training, these results improve further, demonstrating the architecture's ability to leverage larger-scale training effectively.
-
-=== Impact
 
 PTv3 shows that simplifying architecture design while focusing on scalability can lead to superior performance without sacrificing accuracy. Its reduced computational requirements make high-performance point cloud processing more practical for real-world applications, while its ability to leverage larger-scale training through multi-dataset approaches points to promising future developments in the field.
 The success of PTv3 challenges the notion that increasing architectural complexity is necessary for improved performance, suggesting instead that thoughtful simplification enabling better scaling might be a more productive direction for future research.
 
-== Point Prompt Training
 
+= Experimental Setup
 == Training and Evaluation Phase
 TODO: include train-time transforms, grid sampling, sphere cropping transforms etc
 
@@ -546,7 +573,6 @@ Finally, inference on a real LiDAR cloud of the Queens House site was run using 
 
 
 == Intra-site experiments
-
 Each of these experiments refer to a model that was trained and tested on the same site/sites.
 
 The library experiment was performed on a single 12GB VRAM RTX4070, on a machine with 32GB of RAM.
