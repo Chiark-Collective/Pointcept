@@ -1,3 +1,5 @@
+#import "@preview/fletcher:0.5.2" as fletcher: diagram, node, edge
+
 // Document format
 #set text(size: 10pt)
 #set page(
@@ -410,6 +412,55 @@ between mesh faces.
 The point clouds generated in this way are ready to be used in the network.
 Our pipeline is capable of producing PyTorch state dictionaries containing the point cloud information for direct use as network input, or as `.las` files that
 leverage the las format's compression and ease of visualisation in external programs like CloudCompare.
+#figure(
+diagram(
+  node-stroke: 1pt,
+  edge-stroke: 1pt,
+
+  // Start Node
+  node((0, 0), [CloudCompare .bin files], corner-radius: 2pt),
+  edge("-|>"),
+
+  // Extract to .ply format
+  node((0, -1), [Extract to .ply format], corner-radius: 2pt),
+  edge("-|>"),
+
+  // Fold Allocation
+  node((0, -2), [Fold Allocation], corner-radius: 2pt),
+
+  // Edges to Folds
+  edge((0, -2), (-1, -3), "-|>", bend: 20deg),
+  edge((0, -2), (0, -3), "-|>"),
+  edge((0, -2), (1, -3), "-|>", bend: -20deg),
+
+  // Fold Nodes
+  node((-1, -3), [Test Fold], corner-radius: 2pt),
+  node((0, -3), [Train Fold], corner-radius: 2pt),
+  node((1, -3), [Evaluation Fold], corner-radius: 2pt),
+
+  // Edges from Folds to vtkPolyDataSampler
+  edge((-1, -3), (0, -4), "-|>", bend: 20deg),
+  edge((0, -3), (0, -4), `pointcloud sampling`, "-|>"),
+  edge((1, -3), (0, -4), "-|>", bend: -20deg),
+
+  // vtkPolyDataSampler Node
+  node((0, -4), [vtkPolyDataSampler], corner-radius: 2pt),
+  edge("-|>"),
+
+  // vtkPoissonDiskSampler Node
+  node((0, -5), [vtkPoissonDiskSampler], corner-radius: 2pt),
+
+  // Edges to Outputs
+  edge((0, -5), (-0.8, -6), "-|>", bend: 20deg),
+  edge((0, -5), (0.8, -6), "-|>", bend: -20deg),
+
+  // Output Nodes
+  node((-0.8, -6), [.pth format for network ingestion], corner-radius: 2pt),
+  node((0.8, -6), [.las format for visualization], corner-radius: 2pt),
+),
+  placement: none,
+  caption: [An illustration of the data ingestion pipeline used for the site data.],
+)
 
 // #pagebreak()
 = PTv3 with PPT
@@ -555,10 +606,64 @@ The success of PTv3 challenges the notion that increasing architectural complexi
 
 = Experimental Setup
 == Training and Evaluation Phase
-TODO: include train-time transforms, grid sampling, sphere cropping transforms etc
+A series of train-time transforms are utilised to help prevent overfitting and ensure VRAM constraints are respected, described below:
+
+- *CenterShift 1*: shifts the center of the point cloud, including the z-axis.
+- *RandomRotate Z*: rotates the point cloud around the z-axis by a random angle.
+  - Angle: `[-1, 1]` radians
+  - Probability: `25%`
+- *RandomRotate X*: applies a small rotation around the x-axis (tilt)
+  - Angle: `[-0.015625, 0.015625]` radians
+  - Probability: `25%`
+- *RandomRotate Y*: applies a small rotation around the y-axis (tilt)
+  - Angle: `[-0.015625, 0.015625]` radians
+  - Probability: `25%`
+- *RandomScale*: uniformly scales the point cloud within a specified range.
+  - Scale Range: `[0.9, 1.1]`
+- *RandomFlip*: randomly flips the point cloud along one or more axes.
+  - Probability: `50%`
+- *RandomJitter*: adds Gaussian noise to simulate measurement errors.
+  - Sigma: `0.005`
+  - Clip: `0.02`
+- *ChromaticJitter*: randomly adjusts color values to simulate lighting variations.
+  - Probability: `95%`
+  - Standard Deviation: `0.05`
+- *GridSample*: samples points based on a grid to standardize spatial distribution.
+  - Grid Size: 10cm
+- *SphereCrop*: crops the point cloud within a random sphere to ensure VRAM limits are respected
+- *CenterShift 2*: recenters the point cloud horizontally, excluding the z-axis.
+- *NormalizeColor*: normalizes color channels to a standard range.
+- *ShufflePoint*: randomizes the order of points to prevent any ordering bias.
+
+Additionally, the Mix3D algorithm @nekrasov2021mix3doutofcontextdataaugmentation is used with an 85% probability per-batch.
+From the abstract of that paper:
+- "Since scene context helps reasoning about object semantics, current works focus on models with large capacity and receptive fields that can fully capture the global context of an input 3D scene. However, strong contextual priors can have detrimental implications like mistaking a pedestrian crossing the street for a car. In this work, we focus on the importance of balancing global scene context and local geometry, with the goal of generalizing beyond the contextual priors in the training set. In particular, we propose a "mixing" technique which creates new training samples by combining two augmented scenes. By doing so, object instances are implicitly placed into novel out-of-context environments and therefore making it harder for models to rely on scene context alone, and instead infer semantics from local structure as well."
+
+In the training process, each mini-batch comprises a single scene from the training dataset.
+Approximately 20 to 30 mini-batches are processed before conducting an evaluation epoch.
+No gradient accumulation occurs between batches; instead, gradients are reset after each mini-batch to ensure updates are based solely on the current data.
+
+The optimizer used is AdamW @loshchilov2019decoupledweightdecayregularization, which combines adaptive learning rates with weight decay regularization.
+This optimizer accelerates convergence while preventing overfitting.
+The use of the Lovász loss function directly optimizes the IoU metric, ensuring scarce categories receive adequate attention during training.
+
+A OneCycleLR learning rate scheduler is employed to dynamically adjust the learning rate throughout the training process, thereby enhancing convergence and overall model performance.
+The scheduler is configured with a maximum learning rate of 0.003, allowing significant parameter updates during the initial stages of training.
+The learning rate will increase to its peak value within the first 5% of the training iterations.
+Following this initial increase, the learning rate decreases according to a cosine annealing strategy, ensuring a smooth and gradual reduction as training progresses.
+
+During evaluation epochs, all input scenes are processed multiple times to ensure comprehensive coverage of all categories within the sphere crops.
+This repetition leads to a more reliable assessment of the model's performance.
+The evaluation employs only deterministic transformations - CenterShift, GridSample, SphereCrop, and NormalizeColor - to maintain consistency.
+Random data augmentations used during training are omitted to prevent stochastic variations from influencing the evaluation results.
 
 == Testing Phase
-TODO
+The best model as determined during training via the evaluation epochs is then used to acquire predictions for the test scene, which the model has
+not been exposed to at all during training.
+Minimal transforms are applied here to ensure consistency with the network.
+No test-time augmentations are performed at present due to issues with RAM consumption in the current implementation of the inference software, to ensure that
+the test scenes are both as large as possible and able to be run through the network all at once.
+Making the inference code more RAM efficient to enable test-time augmentations is a possible avenue for future work.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Results
