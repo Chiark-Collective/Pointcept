@@ -463,7 +463,7 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 
 2. Encoder Processing
 
-  Grid pooling downsamples points while increasing feature dimensionality. The "Shuffle Orders" mechanism randomly 
+  Grid pooling downsamples points while increasing feature dimensionality. The "Shuffle Orders" operation then randomly 
   varies which serialization pattern will be used for the next block. This variation means points that are separated 
   in one pattern might be grouped together in another, enabling information flow across the point cloud without 
   expensive shift or dilation operations. Points are then processed sequentially by multiple blocks (depths [2,2,6,2] across 
@@ -482,11 +482,11 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 
   - LayerNorm
 
-    Normalizes features independently for each point, maintaining consistent scales throughout the network
-    Computes the mean and standard deviation across feature dimensions, then normalizes and applies learned scaling and offset parameters
-    Critical for stable training in deep networks, particularly with attention mechanisms.
-    Works well with variable batch sizes and sequence lengths, making it ideal for point cloud processing where input sizes can vary
-    Used both before and after self-attention to ensure properly scaled features.
+    Normalizes features independently for each point, maintaining consistent scales throughout the network 
+    to stabilise training. The mean and standard deviation are computed across feature dimensions, then 
+    normalised by applying learned scaling and offset parameters. LayerNorm works well with variable batch 
+    sizes and sequence lengths, making it ideal for point cloud processing where input sizes can vary.
+    Applied both before and after self-attention.
 
   - Self-attention
 
