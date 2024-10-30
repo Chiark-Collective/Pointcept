@@ -1167,19 +1167,20 @@ For each experiment, the following metrics were constructed:
     // Data rows
     [Accuracy], [$ (T P + T N) / "total points" $], [Measures overall performance but can be skewed by class imbalance.],
     [Balanced Accuracy], [$ (1 / N) sum_(i=1)^N T P_i / "total points in class"_i $], [Useful for imbalanced datasets, as it averages accuracy across classes.],
-    [Recall], [$ T P / (T P + F N) $], [Measures completeness for each class; high recall means fewer false negatives.],
-    [Precision], [$ T P / (T P + F P) $], [Measures correctness when the model predicts a class; high precision means fewer false positives.],
+    [Recall], [$ (T P) / (T P + F N) $], [Measures completeness for each class; high recall means fewer false negatives.],
+    [Precision], [$ (T P) / (T P + F P) $], [Measures correctness when the model predicts a class; high precision means fewer false positives.],
     [F1-Score], [$ 2 * ("Precision" * "Recall") / ("Precision" + "Recall") $], [Balances precision and recall, useful in class-imbalanced cases.],
   ),
-  caption: [Metrics used in model evalutaions],
-  placement: none,
-) <table>
-
+  caption: [Metrics used in model evalutaions. Relevant definitions:
 - $T P$: True Positives — Points correctly predicted as belonging to a class.
 - $T N$: True Negatives — Points correctly predicted as not belonging to a class.
 - $F P$: False Positives — Points incorrectly predicted as belonging to a class.
 - $F N$: False Negatives — Points that belong to a class but were not predicted as such.
+],
+  placement: none,
+) <table>
 
+#pagebreak()
 The results are shown in @allmetrics.
 
 #figure(
