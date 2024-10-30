@@ -423,12 +423,12 @@ Points are then sorted according to these indices, forming an ordered sequence i
 their original features (RGB values and surface normals).
 
 #figure(
-  image("figs/lib_inference1.png", width: 110%),
-  caption: [Library test scene inference (panoramic).],
+  image("figs/sf_curve_serialisation.png", width: 100%),
+  caption: [Illustration of serialisation along the four distinct space-filling curves from Ref. @wu2024ptv3],
   outlined: false,
   placement: none,
   gap: 1em,
-) <lib_inf1>
+) <sf_curve_serialisation>
 
 This process inevitably loses some precise spatial information. For example, two points that are close in 
 3D space might end up with quite different sequence indices if they fall on opposite sides of a 
@@ -446,19 +446,11 @@ order. This large patch size is a key advancement - previous architectures like 
 16 points in their local attention windows due to computational constraints. The efficient serialization 
 approach enables this dramatic expansion of the receptive field.
 
-#figure(
-  image("figs/lib_inference1.png", width: 110%),
-  caption: [Library test scene inference (panoramic).],
-  outlined: false,
-  placement: none,
-  gap: 1em,
-) <lib_inf1>
-
 === Receptive Field and Multi-Scale Processing
 
 The network processes point clouds at multiple scales through its U-Net structure. At each encoder stage, 
-grid pooling downsamples the points by a factor of 2, effectively doubling the spatial extent that each 
-point represents. Combined with the large 1024-point patches, this means that deeper layers in the network 
+grid pooling downsamples the points by a factor of 2, effectively doubling the receptive field. Combined 
+with the large 1024-point patches, this means that deeper layers in the network 
 can view increasingly large spatial contexts.
 
 This multi-scale approach works in concert with the serialization strategy. While serialization might 
@@ -515,12 +507,12 @@ PTv3 processes point clouds through initialization followed by encoder stages:
 The feature dimensions follow a [64→128→256→512] pattern through the encoder stages, with corresponding decoder stages following [256→128→64→64].
 
 #figure(
-  image("figs/lib_inference1.png", width: 110%),
-  caption: [Library test scene inference (panoramic).],
+  image("figs/ptv3_1.png", width: 100%),
+  caption: [PTv3 encoder structure described in Ref. @wu2024ptv3],
   outlined: false,
   placement: none,
   gap: 1em,
-) <lib_inf1>
+) <ptv3_encoder>
 
 This architectural design represents a careful balance between efficiency and effectiveness. By replacing expensive operations like KNN search and relative positional encoding with structured serialization and sparse convolutions, PTv3 achieves both faster processing and larger receptive fields. The combination of multiple serialization patterns and multi-scale processing helps overcome the potential limitations of any single spatial organization scheme.
 
@@ -529,20 +521,20 @@ This architectural design represents a careful balance between efficiency and ef
 TODO
 
 #figure(
-  image("figs/lib_inference1.png", width: 110%),
-  caption: [Library test scene inference (panoramic).],
+  image("figs/ppt_1.png", width: 100%),
+  caption: [PPT 1],
   outlined: false,
   placement: none,
   gap: 1em,
-) <lib_inf1>
+) <ppt_1>
 
 #figure(
-  image("figs/lib_inference1.png", width: 110%),
-  caption: [Library test scene inference (panoramic).],
+  image("figs/ppt_2.png", width: 100%),
+  caption: [PPT2],
   outlined: false,
   placement: none,
   gap: 1em,
-) <lib_inf1>
+) <ppt_2>
 
 === Results
 
