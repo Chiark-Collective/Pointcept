@@ -899,14 +899,16 @@ Making the inference code more RAM efficient to enable test-time augmentations i
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Results
-Three primary experiments were carried out with different sites used in the training and testing. These combinations were:
-- Library scene alone
-- Park Row and Maritime Museum
-- Brass Foundry and both Royal Observatory sites
-The more performant of the real-site experiments then had its training re-run, but with the library scene included in the training phase.
+A series of experiments was conducted to evaluate the performance and generalization capabilities of the developed models under varying conditions of data familiarity and extrapolation.
+Initially, intra-site experiments were performed, wherein the training, test, and evaluation folds were derived from the same HBIM site. In this setup, the models were required to undertake a modest degree of extrapolation within a consistent architectural context.
+Subsequently, cross-site experiments were undertaken, where models trained on one set of HBIM sites were tested on an entirely unseen HBIM site.
+This approach introduced a higher level of extrapolation, assessing the models' ability to generalize across diverse building structures and configurations.
 
-A model was also tested on a site it had not see at all, to test the ability to generalise when using such small training data sets.
-Finally, inference on a real LiDAR cloud of the Queens House site was run using the most performant model.
+Finally, an advanced experiment involved evaluating one of the trained models on real lidar data from the Queens House heritage building.
+Due to the absence of detailed geometrical and color texture information on the HBIM scene surfaces, this scenario demanded a significantly greater extent of extrapolation.
+
+Collectively, these experiments provided valuable insights into the models' robustness, their capacity to adapt to new and varied environments, and their potential applicability to real-world heritage building data.
+The results of these experiments allow for insights into possible future work to enhance the ability of the models to generalise.
 
 == Intra-site experiments
 Each of these experiments refer to a model that was trained and tested on the same site/sites.
@@ -1188,11 +1190,12 @@ The results are shown in @allmetrics.
   gap: 1em,
 ) <allmetrics>
 
-As expected, the very simple library experiment demonstrates the strongest metrics across the board.
+As expected, the very simple library experiment demonstrates the highest metrics across the board.
 For the experiments with actual sites, the model with Park Row and Maritime Museum performs the strongest.
 This does not necessarily entail that the model is better for general use than the one trained on Brass Foundry and the ROG sites;
-the increased complexity and variety within the ROG sites compared to Park Row/Maritime Museum means that the testing scenes
-in those sites are less similar to the training and evaluation scenes.
+the increased complexity and variety within the ROG sites compared to Park Row/Maritime Museum means that the test scenes will be more geometrically distinct from the training 
+and evaluation scenes.
+The different complexities between the test scenes in these experiments mean that direct comparisons between performance metrics are less meaningful.
 
 We note that the metrics for the library augmented scene are broadly similar to the Park Row/Maritime Museum control sample,
 but with a significantly lower balanced accuracy, suggesting that the model trained with library augmentation has slightly more bias 
@@ -1261,6 +1264,9 @@ The more significant issue is the model's frequent confusion of flat surface cat
 The meshes for these surfaces are geometrically similar, so the model has to rely on local context to differentiate between floor, ceiling, footpath etc.
 It should be noted that the use of properly textured meshes could provide the necessary colour information for the model to distinguish between these categories.
 Texture mapping would be an obvious choice here for immediate future improvements to the approach.
+
+As mentioned before, the model trained on the ROG and Brass Foundry sites faces much more geometrical complexity and variety than the Park Row and Maritime Museum model.
+It is possible that despite lower "on-paper" metrics, the model trained with ROG may have a greater ability to generalise than the model investigated here.
 
 #pagebreak()
 == Inference on Queens House LiDAR data
@@ -1362,10 +1368,10 @@ Therefore, a relatively minor adjustment to the data ingestion pipeline could en
 By enabling color to complement geometry, the network's segmentation accuracy across challenging classes could be significantly enhanced.
 
 == Custom Loss Functions <customloss>
-the implementation of a loss function incorporating explicit class weights could be explored to differentiate the severity of classification errors based on both class and error type.
+The implementation of a loss function incorporating explicit class weights could be explored to differentiate the severity of classification errors based on both class and error type.
 This approach would allow for the punishment of misclassifications to vary depending on the specific classes involved; for example, erroneously identifying a "roof" as a "wall" would be penalized more heavily than misclassifying "grass" as a "footpath." Additionally, imposing stringent penalties on the misattribution of cardinal classes to the "other" category would encourage the network to adopt a more conservative approach when predicting "other."
 This would ensure that such predictions are made only when the network achieves a high level of certainty, thereby enhancing the precision of class-specific predictions and reducing the likelihood of ambiguous classifications.
-By tailoring the loss function in this manner, the overall robustness and reliability of the model could be significantly improved, leading to more accurate and trustworthy outcomes in diverse classification scenarios.
+By tailoring the loss function in this manner, the overall robustness and reliability of the model could be significantly improved.
 
 == Threshold-Based Prediction Strategies
 As an alternative to a conventional softmax approach, alternative prediction strategies beyond the conventional argmax approach could be explored to enhance classification accuracy.
@@ -1384,7 +1390,7 @@ Nonetheless, experimenting with threshold-based approaches could provide valuabl
 An alternative approach to handling the "other" category involves transforming the classification problem from an N-class to an N-1 class scenario by removing the explicit "other" category.
 This modification necessitates altering the network's output layers to abandon the prediction of explicit class probabilities that sum to one. Instead, an element-wise sigmoid output layer could be employed, allowing the model to predict independent scores between zero and one for each cardinal class.
 In this paradigm, predictions of "other" would be defined as instances where the scores of all other classes fall below a predetermined threshold.
-Conversely, if the "other" class score is sufficiently high, it would be selected as the prediction. In cases where these threshold conditions are not met, the model would default to selecting the class with the second-highest probability.
+
 Although this method offers a means to circumvent the ambiguous semantics of the "other" label within the PPT module, it may introduce complexity and rely on additional heuristics.
 Consequently, more robust and sophisticated techniques are recommended to address the underlying classification challenges directly rather than implementing workaround solutions.
 
@@ -1397,8 +1403,7 @@ For instance, providing summaries of the contents encompassed by "other" within 
 
 Additionally, the network's loss function would require careful modification to accommodate this refined labeling, as point-level labels would remain under the broader "other" category without distinguishing between the distinct subclasses.
 This enhancement could be achieved manually or delegated to a Vision-Language Model (VLM), which might be trained to analyze static images of "other" regions within the input cloud and generate descriptive labels for the objects constituting the "other" class.
-By explicitly incorporating more detailed semantic information, the model's ability to accurately classify and differentiate between various objects within the "other" category could be substantially improved, thereby enhancing overall classification performance and reliability.
-
+By explicitly incorporating more detailed semantic information, the model's ability to accurately classify and differentiate between various objects within the "other" category could be substantially improved.
 
 #pagebreak()
 #bibliography("bibliography.bib")
