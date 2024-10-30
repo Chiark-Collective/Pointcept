@@ -395,6 +395,7 @@ TODO: include train-time transforms, grid sampling, sphere cropping transforms e
 == Testing Phase
 TODO
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Results
 Three primary experiments were carried out with different sites used in the training and testing. These combinations were:
 - Library scene alone
@@ -409,6 +410,9 @@ Finally, inference on a real LiDAR cloud of the Queens House site was run using 
 == Intra-site experiments
 
 Each of these experiments refer to a model that was trained and tested on the same site/sites.
+
+The library experiment was performed on a single 12GB VRAM RTX4070, on a machine with 32GB of RAM.
+All other experiments were performed on a single 24GB VRAM RTX4090, on a machine with 32GB of RAM.
 
 === Library Scene
 The experiment training on just the HBIM library scenes functions as a metric for how distinguishable the different category geometries are in isolation.
@@ -472,7 +476,37 @@ The results for categories which are geometrically distinct like railings, colum
   gap: 1em,
 ) <lib_confmatrix>
 
+#pagebreak()
 === Park Row and Maritime Museum
+Compared to the library experiment, these experiments begin to test the ability of the architecture to adapt to parts of buildings it has not yet seen, and to utilise contextual information found in real buildings.
+
+As can be seen in the below results, the model performs overall very well across the board with the exception of Rainwater pipe, which remains a difficult feature to distinguish.
+For these sites, this is likely because the number of instances of Rainwater Pipe in the input data is very limited, with only Park Row featuring any such features and Maritime Museum having none.
+
+
+#figure(
+  image("figs/mm_inference1a.png", width: 110%),
+  caption: [Maritime Museum test scene 1. This shows some limited instances of the input data using the wrong classification (some of the ceiling here should clearly be wall). Other than this, the scene demonstrates a powerful ability to resolve both macroscopic and local structures.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <mm_inf1a>
+
+#figure(
+  image("figs/mm_inference1b.png", width: 110%),
+  caption: [Maritime Museum test scene 1. Some limited misidentication of ceiling as footpath can be shown, indicating that perhaps contextual information on the edge of the scene is missing, or that these categories are still occasionally ambiguous to the network.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <mm_inf1b>
+
+#figure(
+  image("figs/pr_inference1.png", width: 110%),
+  caption: [Park Row test scene, demonstrating excellent agreement between ground truth and prediction. The ability of the model to resolve fine geometric features on the periphery of the scene despite the scene edges lacking context is encouraging. The resolution of ceiling/roof/floor is also encouraging, indicating that perhaps the model is able to acquire enough local context to resolve these otherwise similar surface categories.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <mm_inf1a>
 
 #figure(
   table(
@@ -499,7 +533,38 @@ The results for categories which are geometrically distinct like railings, colum
   placement: none,
 )
 
+#figure(
+  image("figs/prmm_confmatrix.png", width: 120%),
+  caption: [Park Row and Maritime museum confusion matrix.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <prmm_confmatrix>
+
+#pagebreak()
 === Brass Foundry and Royal Observatory
+The results for this experiment largely echo those of the Park Row/Maritime Museum experiment, with a few exceptions:
+- the geometry for buildings in this experiment, particularly for the ROG sites, is much more complex. This leads to a slightly poorer ability of the model to distinguish walls from categories typically proximate to them, like doors and windows.
+- the performance for RWP is much stronger here, although still one of the least accurate classifications. This is likely because these sites are more rich in RWP structures than the Park Row/Maritime Museum setup.
+- the performance for columns suffers here due to the columns in these sites being not only more scarce, but much smaller than in Park Row/Maritime Museum.
+
+The above differences between the two experiments demonstrates quite strongly the limitations of using such low numbers of sites in the training; more sites with better and more diverse coverage of elements across the taxonomy is key for the model's ability to generalise.
+
+#figure(
+  image("figs/rogsouth_inference1.png", width: 110%),
+  caption: [ROG South test scene 1. Compared to the previous experiment, the more complex building geometry makes the resolution of doors and windows somewhat weaker. Nevertheless, the model still is able to resolve nearly all the macroscopic structures in the scene.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <rogsouth_inf1a>
+
+#figure(
+  image("figs/rognorth_inference1.png", width: 110%),
+  caption: [ROG North test scene 1. Despite the intricate structure in the complex of buildings, the model is largely able to well-resolve ceilings and walls. The outdoor elements are more weakly resolved.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <rogsouth_inf1a>
 
 #figure(
   table(
@@ -526,7 +591,38 @@ The results for categories which are geometrically distinct like railings, colum
   placement: none,
 )
 
+#figure(
+  image("figs/rogbr_confmatrix.png", width: 120%),
+  caption: [Brass Foundry and ROG confusion matrix.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <bfrog_confmatrix>
+
+#pagebreak()
 === Augmenting Park Row/Maritime with Library Scene
+This experiment investigated the impact of including the HBIM library scene in the model training upon the inference for the Park Row and Maritime Museum test scenes.
+
+Generally, we observe that despite some small features being slightly more well resolved, an overall degradation is observed in the resolution of macroscopic features.
+In particular, this version of the model is slightly more prone to the misidentication of other categories as footpath.
+
+As such, it can be concluded that the loss of scene context in the HBIM library data results in a detrimental effect when the model is applied to real building configurations.
+
+#figure(
+  image("figs/libaugmented_inference1.png", width: 110%),
+  caption: [Maritime Museum test scene 1, inferred using a model augmented with the library training scene. Compared to the model without training augmentation, the resolution of the central chimney feature is improved, but with the stairs outside almost entirely being mis-identified as footpath. ],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <libaugmented_1>
+
+#figure(
+  image("figs/libaugmented_inference2.png", width: 110%),
+  caption: [Park Row test scene, inferred using a model augmented with the library training scene. Compared to the model without training augmentation, we can observe a higher incidence of floors being misidentified as footpath.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <libaugmented_2>
 
 #figure(
   table(
@@ -553,14 +649,170 @@ The results for categories which are geometrically distinct like railings, colum
   placement: none,
 )
 
+#figure(
+  image("figs/libaugmented_confmatrix.png", width: 120%),
+  caption: [Park Row and Maritime Museum with library training augmentation confusion matrix.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <libaugmented_confmatrix>
+
+#pagebreak()
+=== Intra-site summary
+For each experiment, the following metrics were constructed:
+#figure(
+  table(
+    columns: 3,
+    // Header row
+    [Metric], [Formula], [Use Case],
+    // Data rows
+    [Accuracy], [$ (T P + T N) / "total points" $], [Measures overall performance but can be skewed by class imbalance.],
+    [Balanced Accuracy], [$ (1 / N) sum_(i=1)^N T P_i / "total points in class"_i $], [Useful for imbalanced datasets, as it averages accuracy across classes.],
+    [Recall], [$ T P / (T P + F N) $], [Measures completeness for each class; high recall means fewer false negatives.],
+    [Precision], [$ T P / (T P + F P) $], [Measures correctness when the model predicts a class; high precision means fewer false positives.],
+    [F1-Score], [$ 2 * ("Precision" * "Recall") / ("Precision" + "Recall") $], [Balances precision and recall, useful in class-imbalanced cases.],
+  ),
+  caption: [Metrics used in model evalutaions],
+  placement: none,
+) <table>
+
+- $T P$: True Positives — Points correctly predicted as belonging to a class.
+- $T N$: True Negatives — Points correctly predicted as not belonging to a class.
+- $F P$: False Positives — Points incorrectly predicted as belonging to a class.
+- $F N$: False Negatives — Points that belong to a class but were not predicted as such.
+
+The results are shown in @allmetrics.
+
+#figure(
+  image("figs/allmetrics.png", width: 89%),
+  caption: [Park Row and Maritime Museum with library training augmentation confusion matrix.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <allmetrics>
+
+As expected, the very simple library experiment demonstrates the strongest metrics across the board.
+For the experiments with actual sites, the model with Park Row and Maritime Museum performs the strongest.
+This does not necessarily entail that the model is better for general use than the one trained on Brass Foundry and the ROG sites;
+the increased complexity and variety within the ROG sites compared to Park Row/Maritime Museum means that the testing scenes
+in those sites are less similar to the training and evaluation scenes.
+
+We note that the metrics for the library augmented scene are broadly similar to the Park Row/Maritime Museum control sample,
+but with a significantly lower balanced accuracy, suggesting that the model trained with library augmentation has slightly more bias 
+towards the dominant classes in the data.
+
+#pagebreak()
 == Inter-site experiments: Park Row/MM model with Brass Foundry test scene
 
-== Inference on Queens House LiDAR data
+As a check on how well the models are able to generalise to buildings they have not seen at all, predictions for the brass foundry test
+scene were acquired using the model trained on Park Row/Maritime Museum.
 
+@bfgood1 shows the inference on the Brass Foundry test site using the model trained on the Brass Foundry and ROG sites, while @crosscheck1
+shows the same scene run through the model trained on Park Row and Maritime Museum.
+A significant degradation in performance can be observed, with the model commonly confusing footpath, wall, and other in particular.
+The ceiling is generally identified well, but some sections are still misidentified as footpath or railing.
+
+#figure(
+  image("figs/bfgood1.png", width: 89%),
+  caption: [Brass Foundry test scene when the model has been trained on part of the Brass Foundry Site.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <bfgood1>
+
+#figure(
+  image("figs/crossmodel1.png", width: 89%),
+  caption: [Brass Foundry test scene using the model trained on Park Row/Maritime Museum.
+  The model displays significant degradation in performance compared to the intra-site experiments.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <crosscheck1>
+
+In @bfgood2 and @crosscheck2 we can see the same scene from the other side, exposing the building interior.
+This reveals a strong misidentication of the shelving units inside the building (in the Other category) as a variety of 
+other categories, including
+
+#figure(
+  image("figs/bfgood2.png", width: 89%),
+  caption: [Brass Foundry test scene when the model has been trained on part of the Brass Foundry Site.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <bfgood2>
+
+#figure(
+  image("figs/crossmodel2.png", width: 89%),
+  caption: [Brass Foundry test scene using the model trained on Park Row/Maritime Museum.
+  The interior angle reveals that the shelving units in the Other class are being misidentified as a variety of other categories.
+  We can also see the floors and ceilings being confused for footpaths.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <crosscheck2>
+
+While the performance degradation is quite pronounced, it is not entirely unexpected.
+The model used has only been trained on two buildings, Park Row and Maritime Museum.
+These buildings are part of the same complex, and are quite similar, so it's reasonable to expect that the model
+might have a harder time generalising to buildings it has not seen.
+
+This is especially true for the Other category, where the types of objects that can fall under this category is of course exceptionally broad.
+There are no close analogues to the shelving units in the Park Row/Maritime Museum sites;
+nevertheless the model does assign a significant number of the points corresponding to those shelves as Other.
+
+The more significant issue is the model's frequent confusion of flat surface categories for footpath.
+The meshes for these surfaces are geometrically similar, so the model has to rely on local context to differentiate between floor, ceiling, footpath etc.
+It should be noted that the use of properly textured meshes could provide the necessary colour information for the model to distinguish between these categories.
+Texture mapping would be an obvious choice here for immediate future improvements to the approach.
+
+#pagebreak()
+== Inference on Queens House LiDAR data
+As a final experiment, the most performant model (the one trained on Park Row and Maritime Museum) was used to run inference on the Queens House LiDAR-acquired pointcloud.
+The finely-sampled LiDAR pointcloud was downsampled to a 5cm resolution, and predictions were acquired using the model.
+Ground Truths for the updated taxonomy were not yet available, and so the only checks currently possible are visual inspections of the inference results.
+
+It should be noted that due to memory limitations arising in the current implementation of the inference software, the Queens House data had to be 
+passed through the network in fairly aggressively chunked subsamples.
+This could be resulting in the model losing some context around the edges of each subsample, deteriorating performance.
+Adjustments to make the algorithm more memory-efficient, or even simply running the inference on a machine with a larger RAM capacity, would be a high priority in any future work.
+
+In @qh1 we show an exterior corner of the QH building.
+The major 2 issues visible, that occur across the QH subsamples, are the following:
+- walls are frequently misidentified as Other features.
+- Flat surfaces like roofs, floors, and ceiling, are frequently misidentified as footpaths.
+
+For the former issue, there are several possible avenues to improve performance.
+
+#figure(
+  image("figs/qh1.png", width: 89%),
+  caption: [Model predictions for an exterior section of the Queens House. The most obvious classification errors present are walls being misidentified as Other features.
+  We can also see the ceiling is mostly misidentified as footpath.],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <qh1>
+
+#figure(
+  image("figs/qh2.png", width: 89%),
+  caption: [Model predictions for an exterior section of the Queens House. ],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <qh2>
+
+#figure(
+  image("figs/qh3.png", width: 89%),
+  caption: [Model predictions for an exterior section of the Queens House. ],
+  outlined: false,
+  placement: none,
+  gap: 1em,
+) <qh3>
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Summary and Future Work
 TODO
 
-== Custom Loss Functions
+== Custom Loss Functions <customloss>
 
 == Refactoring the "Other" Category
 
