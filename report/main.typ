@@ -28,7 +28,7 @@
   ),
 )
 #align(center, text(15pt)[
-  *#title*,
+  *#title*
 ])
 #align(center, text(12pt)[
   *#subtitle*
@@ -49,9 +49,20 @@
 #align(center)[
   #set par(justify: true)
   *Abstract* \
-  In this study, a low-rank adaptation (LoRA) was applied to a Point Transformer v3 model with Point Prompt Tuning (PPT), pre-trained on ScanNet, S3DIS, and Structured3D datasets, to explore the feasibility of using Heritage Building Information Modeling (HBIM) site data for semantic segmentation on point clouds acquired through real LiDAR.
-  Models were trained with an intra-site fold allocation strategy, achieving 83-86% overall accuracy and 62-63% mIoU within the same site.
-  Limitations in generalization were observed in both application to HBIM sites the models had not seen, and application to a point cloud of a heritage site acquired through real LiDAR. We identifiy the likely causes as poor colour information in the supplied site models, insufficient diversity and volume of input data to the models, and semantic label noise in the "other" category. We suggest strategies for addressing these issues in future work.
+  This study explores the feasibility of applying deep learning techniques to the semantic segmentation of heritage building point clouds.
+  Building on lessons learned from the random forest approach, the Point Transformer v3 (PTv3) was chosen for its state-of-the-art perceptive field and its ability to impliclty handle information at different scales.
+  A low-rank adapation (LoRA) was applied to fine-tune an existing PTv3 model pre-trained on the ScanNet, S3DIS, and Structured3D datasets, using HBIM data of four sites in several configurations.
+  Point Prompt Training was used to enhance the domain-specific adaptation of the network.
+  Compared to the Random Forest approach, the overall accuracy of intra-site performance was increased from 44.5% to 83-86% depending on the evaluation dataset, with mIoU values of 62-63%.
+  Some initial investigations were carried out of the model's ability to generalise both to HBIM sites the model has not seen, and to a LiDAR-acquired point cloud of an actual heritage site.
+  Despite some promising results, limitations in generalization were observed in both cases.
+  We identify the likely causes as poor colour information in the supplied site models, insufficient diversity and volume of input data to the models, and semantic label noise in the "other" category. We suggest strategies for addressing these issues in future work.
+
+  // This study explores the feasibility of using Heritage Building Information Modeling (HBIM) site data for semantic segmentation on point clouds acquired through real LiDAR.
+  // T, a low-rank adaptation (LoRA) was applied to a Point Transformer v3 model with Point Prompt Tuning (PPT) to 
+  // The pre-trained on ScanNet, S3DIS, and Structured3D datasets, 
+  // Models were trained with an intra-site fold allocation strategy, achieving 83-86% overall accuracy and 62-63% mIoU within the same site.
+  // Limitations in generalization were observed in both application to HBIM sites the models had not seen, and application to a point cloud of a heritage site acquired through real LiDAR. We identifiy the likely causes as poor colour information in the supplied site models, insufficient diversity and volume of input data to the models, and semantic label noise in the "other" category. We suggest strategies for addressing these issues in future work.
 ]
 #v(15pt) 
 
@@ -221,9 +232,8 @@ A concern raised in this approach is that stripping the building elements of the
 The exported HBIM meshes as supplied were largely lacking in texture information, with only sparse external textures supplied.
 This may imply that some textures that were externally linked by the meshes were not included when exported.
 
-The model contains simple RBG colour information, with mesh faces being monochromatic with a simplified colour scheme.
-As such, the very limited number of elements with textural information had that information removed so that the model did not use the presence or absence of fine
-colour detail to distinguish categories.
+The model contains simple RGB colour information, with mesh faces being monochromatic with a simplified colour scheme.
+As such, the very limited number of elements with corresponding textures information had that information removed so that the model did not use the presence or absence of fine colour detail to distinguish categories.
 
 == Taxonomy
 The previous project highlighted several challenges that arise when using a taxonomy that is too finely segmented. Overly detailed class distinctions led to difficulties in classification, as certain categories became too similar to differentiate effectively. This fine segmentation not only increased the complexity of the model but also introduced issues of class imbalance, where some highly specific categories had insufficient representation. The segmentation of similar elements at high levels of granularity resulted in confusion and poor performance in those classes. These challenges motivated the decision to adopt a simpler, more generalized taxonomy, reducing ambiguity between categories and improving overall model stability and performance. 
@@ -474,7 +484,7 @@ For iteration = 1 to iterations:
         Update best equality score
         Save current grid configuration as best
 
-  Store seed configurations for uniqueness analysis
+    Store seed configurations for uniqueness analysis
 ```
 
 #pagebreak()
@@ -483,7 +493,7 @@ An issue with the raw library data is that each category of HBIM components is p
 This results in an over-clustering of objects within the same category, causing the network to potentially overfit by learning to group proximate objects too strongly in the classification.
 Additionally, the isolation of each sample means that the network's receptive field would predominantly encounter only one category at a time, which can lead to significant issues with stability and convergence during training, as the model lacks exposure to diverse category interactions within the same scene.
 
-To mitigate this, a bespoke algorithm employing the VTK library functionality was deployed to randomly splice and rejoin the library scene to attain a more locally diverse scene.
+To mitigate this, a bespoke algorithm employing the VTK library functionality was deployed to randomly splice and rejoin the library scene to attain a more locally diverse arrangement.
 The library component meshes were divided into small 2.5m² cells, which were then randomly sorted per category.
 From this set, 15% of the cells were allocated to the evaluation sample, 20% to the testing sample, and 65% to the training sample. To further ensure variability, each sample was randomly shuffled, and the cells were recombined in a spiral pattern to construct more compact and diverse scenes.
 The resulting training set is shown in @library_scene.
@@ -507,13 +517,12 @@ The algorithm splits the meshes themselves directly, allowing for quick sampling
 
 The sampling algorithm uses the `vtkPolyDataSampler` to perform an initial sampling of the mesh, creating a relatively uniform output according to the required
 sampling density.
-The algorithm interpolates the color and normal information from the relevant mesh surfaces and vertices to the samples points.
-Some surfaces can be sampled more densely than others, so the clean up the output one of two algorithms can be run to ensure a uniform point distribution:
+The algorithm interpolates the color and normal information from the relevant mesh surfaces and vertices to the sampled points.
+Some surfaces can be sampled more densely than others, so to clean up the output one of two algorithms can be run to ensure a uniform point distribution:
 - `vtkPoissonDiskSampler` - uses a "dart throwing" algorithm that iteratively places points on a surface, ensuring each new point maintains a minimum distance from others, creating a uniform, evenly spaced distribution.
 - `vtkVoxelGrid` - subdivides 3D space into a grid of equally sized voxels, then replaces all points within each voxel with a single representative point, creating a uniformly downsampled point cloud.
 
-Given the points are fed into a grid voxelisation filter as part of the network, we chose the simpler `vtkPoissonDiskSampler` to ensure an even point distribution
-between mesh faces.
+Given that the points are fed into a grid voxelisation filter as part of the network, we chose the simpler `vtkPoissonDiskSampler` to ensure an even point distribution between mesh faces.
 
 The point clouds generated in this way are ready to be used in the network.
 Our pipeline is capable of producing PyTorch state dictionaries containing the point cloud information for direct use as network input, or as `.las` files that
@@ -573,11 +582,10 @@ diagram(
 
 == Input Variables
 The input variables for our point cloud segmentation model include the point coordinates (x, y, z), point normals in each direction (nx, ny, nz), and the RGB color channels.
-This streamlined input structure leverages the core geometric and color-based information necessary for segmentation, focusing on features that are universally interpretable across various scenes and capture the essential spatial and color data of each point.
+This streamlined input structure leverages the core geometric and color-based information necessary for segmentation.
 
-In contrast, the previous Random Forest approach relied on a far broader range of input variables, incorporating numerous hand-crafted features
-designed to aid discrimination between classes.
-While effective, this approach required extensive feature engineering, and its performance was inherently limited by the quality and relevance of these manually defined variables.
+In contrast, the previous Random Forest approach relied on a far broader range of input variables, incorporating numerous hand-crafted features designed to aid discrimination between classes.
+This approach required extensive feature engineering, and its performance was inherently limited by the quality and relevance of these manually defined variables.
 
 The deep learning approach, however, is not restricted by predefined input variables;
 instead, the network learns to create its own pseudo-variables or internal representations that are optimized for segmentation.
@@ -867,13 +875,17 @@ A series of train-time transforms are utilised to help prevent overfitting and e
 - *NormalizeColor*: normalizes color channels to a standard range.
 - *ShufflePoint*: randomizes the order of points to prevent any ordering bias.
 
+The Grid sampling resolution of 10cm was chosen for two reasons:
+- to ensure that the 5cm resolution input clouds had enough points for a representative voxelisation. The voxelisation is a necessary component of the PTv3 architecture, and an attempt to voxelize at the same input resolution leads to noisy sampling patterns and voxel cells that miss input points.
+- to increase the perceptive field of the network dramatically. Early optimisations in the approach found that finer voxelisation resolutions led to unstable training.
+
 Additionally, the Mix3D algorithm @nekrasov2021mix3doutofcontextdataaugmentation is used with an 85% probability per-batch.
 From the abstract of that paper:
 - "Since scene context helps reasoning about object semantics, current works focus on models with large capacity and receptive fields that can fully capture the global context of an input 3D scene. However, strong contextual priors can have detrimental implications like mistaking a pedestrian crossing the street for a car. In this work, we focus on the importance of balancing global scene context and local geometry, with the goal of generalizing beyond the contextual priors in the training set. In particular, we propose a "mixing" technique which creates new training samples by combining two augmented scenes. By doing so, object instances are implicitly placed into novel out-of-context environments and therefore making it harder for models to rely on scene context alone, and instead infer semantics from local structure as well."
 
 In the training process, each mini-batch comprises a single scene from the training dataset.
 Approximately 20 to 30 mini-batches are processed before conducting an evaluation epoch.
-No gradient accumulation occurs between batches; instead, gradients are reset after each mini-batch to ensure updates are based solely on the current data.
+No gradient accumulation occurs between batches.
 
 The optimizer used is AdamW @loshchilov2019decoupledweightdecayregularization, which combines adaptive learning rates with weight decay regularization.
 This optimizer accelerates convergence while preventing overfitting.
@@ -884,8 +896,7 @@ The scheduler is configured with a maximum learning rate of 0.003, allowing sign
 The learning rate will increase to its peak value within the first 5% of the training iterations.
 Following this initial increase, the learning rate decreases according to a cosine annealing strategy, ensuring a smooth and gradual reduction as training progresses.
 
-During evaluation epochs, all input scenes are processed multiple times to ensure comprehensive coverage of all categories within the sphere crops.
-This repetition leads to a more reliable assessment of the model's performance.
+During evaluation epochs, all input scenes are processed multiple times producing different regions after the random sphere crop to ensure comprehensive coverage of all categories over the evaluation.
 The evaluation employs only deterministic transformations - CenterShift, GridSample, SphereCrop, and NormalizeColor - to maintain consistency.
 Random data augmentations used during training are omitted to prevent stochastic variations from influencing the evaluation results.
 
@@ -895,16 +906,17 @@ not been exposed to at all during training.
 Minimal transforms are applied here to ensure consistency with the network.
 No test-time augmentations are performed at present due to issues with RAM consumption in the current implementation of the inference software, to ensure that
 the test scenes are both as large as possible and able to be run through the network all at once.
-Making the inference code more RAM efficient to enable test-time augmentations is a possible avenue for future work.
+
+A simple but effective improvement in possible future work is making the inference code more RAM efficient to enable test-time augmentations.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 = Results
 A series of experiments was conducted to evaluate the performance and generalization capabilities of the developed models under varying conditions of data familiarity and extrapolation.
-Initially, intra-site experiments were performed, wherein the training, test, and evaluation folds were derived from the same HBIM site. In this setup, the models were required to undertake a modest degree of extrapolation within a consistent architectural context.
+Initially, intra-site experiments were performed, wherein the training, test, and evaluation folds were derived from the same HBIM site/sites. In this setup, the models were required to undertake a modest degree of extrapolation within a consistent architectural context.
 Subsequently, cross-site experiments were undertaken, where models trained on one set of HBIM sites were tested on an entirely unseen HBIM site.
 This approach introduced a higher level of extrapolation, assessing the models' ability to generalize across diverse building structures and configurations.
 
-Finally, an advanced experiment involved evaluating one of the trained models on real lidar data from the Queens House heritage building.
+Finally, an advanced experiment involved evaluating one of the trained models on real LiDAR data from the Queens House heritage building.
 Due to the absence of detailed geometrical and color texture information on the HBIM scene surfaces, this scenario demanded a significantly greater extent of extrapolation.
 
 Collectively, these experiments provided valuable insights into the models' robustness, their capacity to adapt to new and varied environments, and their potential applicability to real-world heritage building data.
@@ -915,13 +927,13 @@ Each of these experiments refer to a model that was trained and tested on the sa
 
 === Library Scene
 The experiment training on just the HBIM library scenes functions as a metric for how distinguishable the different category geometries are in isolation.
-The extremely synthetic nature of this scene means the model is unable to learn from typical geometric context between elements, limiting its ability to distinguish geometrically similar categories that would normally be distinguishable by that context (e.g. walkways and floors are almost identical given the lack of surface texturing and color texturing).
+The extremely synthetic nature of this scene means the model is broadly unable to learn from typical geometric context between elements, limiting its ability to distinguish geometrically similar categories that would normally be distinguishable by that context (e.g. walkways and floors are almost identical given the lack of surface texturing and color texturing).
 
 This reflects in the inference results for the test scene.
 As can be seen in the summarised metrics in @lib_metrics and the confusion matrix in @lib_confmatrix, features that are geometrically similar are frequent points of confusion.
 We note that classification for grass, ceilings and roofs perform well while floor and footpath are frequently mis-identified for one another:
-- grass has enough RGB data (being the only green surface) to be identified by the network, showing the network is capable of using RGB information when the information makes for a powerful discriminator.
-- ceiling and roof elements in the scene are elevated with a random offset, it's likely the network is learning to distinguish these two from other categories because of their relative height in the scene, showing the network is properly using z-axis contextual information.
+- the network recognises grass from its RGB data, showing it is capable of using RGB information when the information makes for a powerful discriminator.
+- ceiling and roof elements in the scene are elevated with a random offset; it is likely the network is learning to distinguish these two from other categories because of their orientation relative to neighbouring elements in the scene.
 - ceiling and roof are well-distinguished between each other because their shapes in the HBIM library are quite different. Ceilings tend to be sloped, roofs tend to be flat. As such we should not a priori expect strong separation in real scenes based on geometry alone: contextual information will be very important.
 
 The results for categories which are geometrically distinct like railings, columns, RWP etc, the low-rank adaptation has sufficient felxibility to capture those differences.
@@ -979,7 +991,7 @@ The results for categories which are geometrically distinct like railings, colum
 === Park Row and Maritime Museum
 Compared to the library experiment, these experiments begin to test the ability of the architecture to adapt to parts of buildings it has not yet seen, and to utilise contextual information found in real buildings.
 
-As can be seen in the below results, the model performs overall very well across the board with the exception of Rainwater pipe, which remains a difficult feature to distinguish.
+As can be seen in the below results, the model performs well across the board with the exception of Rainwater pipe, which remains a difficult feature to distinguish.
 For these sites, this is likely because the number of instances of Rainwater Pipe in the input data is very limited, with only Park Row featuring any such features and Maritime Museum having none.
 
 
@@ -1005,7 +1017,7 @@ For these sites, this is likely because the number of instances of Rainwater Pip
   outlined: false,
   placement: none,
   gap: 1em,
-) <mm_inf1a>
+) <pr_inf1a>
 
 #figure(
   table(
@@ -1048,6 +1060,11 @@ The results for this experiment largely echo those of the Park Row/Maritime Muse
 - the performance for columns suffers here due to the columns in these sites being not only more scarce, but much smaller than in Park Row/Maritime Museum.
 
 The above differences between the two experiments demonstrates quite strongly the limitations of using such low numbers of sites in the training; more sites with better and more diverse coverage of elements across the taxonomy is key for the model's ability to generalise.
+
+The ROG sites in particular feature many outdoor areas compared to the other sites.
+The performance in these outdoor areas is occasionally poor relative to the discrimination achieved on the building elements.
+This may be a consequence of the PTv3 model's pre-training data consisting of only indoor scenes.
+A possible area of improvement for the approach would be utilising a PTv3 base model which has also been trained using outdoor scenes.
 
 #figure(
   image("figs/rogsouth_inference1.png", width: 110%),
@@ -1105,7 +1122,8 @@ This experiment investigated the impact of including the HBIM library scene in t
 Generally, we observe that despite some small features being slightly more well resolved, an overall degradation is observed in the resolution of macroscopic features.
 In particular, this version of the model is slightly more prone to the misidentication of other categories as footpath.
 
-As such, it can be concluded that the loss of scene context in the HBIM library data results in a detrimental effect when the model is applied to real building configurations.
+As such, it can be concluded that naively including the library scene in the training in the same fashion as scenes from real sites can result in a degradation of overall network performance.
+There may exist better ways to handle augmentation with the synthetic library data such that it can help the network better understand the geometric features of individual elements without diluting important local context.
 
 #figure(
   image("figs/libaugmented_inference1.png", width: 110%),
@@ -1166,7 +1184,7 @@ For each experiment, the following metrics were constructed:
     [Metric], [Formula], [Use Case],
     // Data rows
     [Accuracy], [$ (T P + T N) / "total points" $], [Measures overall performance but can be skewed by class imbalance.],
-    [Balanced Accuracy], [$ (1 / N) sum_(i=1)^N T P_i / "total points in class"_i $], [Useful for imbalanced datasets, as it averages accuracy across classes.],
+    [Balanced Accuracy], [$ (1 / N) sum_(i=1)^N (T P_i) / "total points in class"_i $], [Useful for imbalanced datasets, as it averages accuracy across classes.],
     [Recall], [$ (T P) / (T P + F N) $], [Measures completeness for each class; high recall means fewer false negatives.],
     [Precision], [$ (T P) / (T P + F P) $], [Measures correctness when the model predicts a class; high precision means fewer false positives.],
     [F1-Score], [$ 2 * ("Precision" * "Recall") / ("Precision" + "Recall") $], [Balances precision and recall, useful in class-imbalanced cases.],
@@ -1231,8 +1249,8 @@ The ceiling is generally identified well, but some sections are still misidentif
 ) <crosscheck1>
 
 In @bfgood2 and @crosscheck2 we can see the same scene from the other side, exposing the building interior.
-This reveals a strong misidentication of the shelving units inside the building (in the Other category) as a variety of 
-other categories, including
+This reveals a misidentication of the shelving units inside the building (in the Other category) as a variety of 
+cardinal categories.
 
 #figure(
   image("figs/bfgood2.png", width: 89%),
@@ -1257,9 +1275,10 @@ The model used has only been trained on two buildings, Park Row and Maritime Mus
 These buildings are part of the same complex, and are quite similar, so it's reasonable to expect that the model
 might have a harder time generalising to buildings it has not seen.
 
-This is especially true for the Other category, where the types of objects that can fall under this category is of course exceptionally broad.
+This is especially true for the Other category, where the type of objects that can fall under this category is of course exceptionally broad.
 There are no close analogues to the shelving units in the Park Row/Maritime Museum sites;
 nevertheless the model does assign a significant number of the points corresponding to those shelves as Other.
+A more thoughtful treatment of the Other category more generally is therefore a promising area for future improvement.
 
 The more significant issue is the model's frequent confusion of flat surface categories for footpath.
 The meshes for these surfaces are geometrically similar, so the model has to rely on local context to differentiate between floor, ceiling, footpath etc.
@@ -1269,10 +1288,9 @@ Texture mapping would be an obvious choice here for immediate future improvement
 As mentioned before, the model trained on the ROG and Brass Foundry sites faces much more geometrical complexity and variety than the Park Row and Maritime Museum model.
 It is possible that despite lower "on-paper" metrics, the model trained with ROG may have a greater ability to generalise than the model investigated here.
 
-#pagebreak()
 == Inference on Queens House LiDAR data
-As a final experiment, the most performant model (the one trained on Park Row and Maritime Museum) was used to run inference on the Queens House LiDAR-acquired pointcloud.
-The finely-sampled LiDAR pointcloud was downsampled to a 5cm resolution, and predictions were acquired using the model.
+As a final experiment, the Park Row and Maritime Museum model was used to run inference on the Queens House LiDAR-acquired point cloud.
+The finely-sampled LiDAR point cloud was downsampled to a 5cm resolution, and predictions were acquired using the model.
 Ground Truths for the updated taxonomy were not yet available, and so the only checks currently possible are visual inspections of the inference results.
 
 It should be noted that due to memory limitations arising in the current implementation of the inference software, the Queens House data had to be 
@@ -1295,8 +1313,7 @@ The major 2 issues visible, that occur across the QH subsamples, are the followi
 ) <qh1>
 
 For the former issue, there are several possible explanations for this, and ways to improve upon the approach.
-The most obvious issue is that for this model, a great many features classes as Other resemble walls (or could indeed be perceived by 
-a person as a wall of some kind).
+The most obvious issue is that for this model's training data, a great many features in the Other category are geometrically similar to walls.
 A render of the Other mesh category for Maritime Museum is shown in @mm_other.
 
 #figure(
@@ -1318,7 +1335,7 @@ The second dominant error that can be seen in the visualisations, the miscategor
 dramatically by the inclusion of more complex colour information and texturing.
 This was verified by converting the RGB information on the QH data into a grayscale colourspace by using the luminence formula.
 It could be observed that the network's output barely changed at all without colour information present in the input data, meaning that
-the network is very likely not deriving much useful information from colour when distinguishing most cateogories.
+the network is very likely not deriving much useful information from colour when distinguishing most categories.
 
 It should be noted that the RGB data present in the HBIM meshes is sometimes a very useful discriminator, as is the case for grass
 which is always uniquely coloured green in the training data, and is generally well identified relative to the other flat surface 
@@ -1376,6 +1393,9 @@ This approach would allow for the punishment of misclassifications to vary depen
 This would ensure that such predictions are made only when the network achieves a high level of certainty, thereby enhancing the precision of class-specific predictions and reducing the likelihood of ambiguous classifications.
 By tailoring the loss function in this manner, the overall robustness and reliability of the model could be significantly improved.
 
+Specialising the model towards core categories is also possible in this paradigm.
+This is particularly relevent if high accuracy is required for only a specific subset of the classifications.
+
 == Threshold-Based Prediction Strategies
 As an alternative to a conventional softmax approach, alternative prediction strategies beyond the conventional argmax approach could be explored to enhance classification accuracy.
 Specifically, the implementation of post-hoc thresholds for the "other" class might be considered.
@@ -1407,6 +1427,16 @@ For instance, providing summaries of the contents encompassed by "other" within 
 Additionally, the network's loss function would require careful modification to accommodate this refined labeling, as point-level labels would remain under the broader "other" category without distinguishing between the distinct subclasses.
 This enhancement could be achieved manually or delegated to a Vision-Language Model (VLM), which might be trained to analyze static images of "other" regions within the input cloud and generate descriptive labels for the objects constituting the "other" class.
 By explicitly incorporating more detailed semantic information, the model's ability to accurately classify and differentiate between various objects within the "other" category could be substantially improved.
+
+== Miscellaneous Improvments
+
+Throughout the text, several smaller changes that could nevertheless provide significant improvements in performance have been described.
+To recap, these are:
+- improvements to the inference code to remove memory restrictions, resulting in larger scenes being able to be processed, and correspondingly fewer cases of scenes losing context around chunk boundaries.
+- the above also enables for a suite of possible test-time augmentations to be implemented, likely improving the model performance to a small degree.
+- a new approach for incorporating the Library scene data, such that the geometry of individual elements could be better understood by the model without diluting local contextual information.
+- using a different PTv3 model that has been trained using a combination of indoor and outdoor scenes as our base model. Outdoor datasets like nuScenes @caesar2020nuscenesmultimodaldatasetautonomous, SemanticKITTI @behley2019semantickittidatasetsemanticscene, and Waymo @sun2020waymo have all been used to train outdoor models in the Pointcept framework.
+- some limited mis-labelling of input data can be seen in the input CloudCompare .bin files, as seen in @mm_inf1a. Corrections to the data annotations should result in a small performance gain.
 
 #pagebreak()
 #bibliography("bibliography.bib")
