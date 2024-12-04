@@ -24,8 +24,6 @@ import torch
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
-    accuracy_score,
-    balanced_accuracy_score,
     f1_score,
     precision_score,
     recall_score,
@@ -172,17 +170,10 @@ def confusion_matrix_dataframe(y_true: np.ndarray, y_pred: np.ndarray, classes: 
 
 def evaluate_hard_label_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     metrics = {
-        'accuracy': accuracy_score(y_true, y_pred),
-        'balanced_accuracy': balanced_accuracy_score(y_true, y_pred),
-        'f1_macro': f1_score(y_true, y_pred, average='macro'),
-        'f1_micro': f1_score(y_true, y_pred, average='micro'),
-        'f1_weighted': f1_score(y_true, y_pred, average='weighted'),
-        'precision_macro': precision_score(y_true, y_pred, average='macro', zero_division=0),
-        'precision_micro': precision_score(y_true, y_pred, average='micro', zero_division=0),
+        'overall_recall': recall_score(y_true, y_pred, average='micro', zero_division=0),
+        'mean_recall': recall_score(y_true, y_pred, average='macro', zero_division=0),
+        'f1_weighted': f1_score(y_true, y_pred, average='weighted', zero_division=0),
         'precision_weighted': precision_score(y_true, y_pred, average='weighted', zero_division=0),
-        'recall_macro': recall_score(y_true, y_pred, average='macro', zero_division=0),
-        'recall_micro': recall_score(y_true, y_pred, average='micro', zero_division=0),
-        'recall_weighted': recall_score(y_true, y_pred, average='weighted', zero_division=0),
     }
     return metrics
 
@@ -200,50 +191,58 @@ def calculate_iou(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) ->
         iou_dict[class_name] = iou
     return iou_dict
 
-def calculate_accuracy_per_class(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) -> Dict[str, float]:
-    """Calculate accuracy for each class."""
-    accuracy_dict = {}
+def calculate_recall_per_class(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) -> Dict[str, float]:
+    """Calculate recall for each class."""
+    recall_dict = {}
     for cls in classes.index:
         tp = np.logical_and(y_pred == cls, y_true == cls).sum()
-        tn = np.logical_and(y_pred != cls, y_true != cls).sum()
-        fp = np.logical_and(y_pred == cls, y_true != cls).sum()
         fn = np.logical_and(y_pred != cls, y_true == cls).sum()
-        denominator = tp + tn + fp + fn
+        denominator = tp + fn
         if denominator == 0:
-            accuracy = np.nan  # Undefined accuracy
+            recall = np.nan  # Undefined recall
         else:
-            accuracy = (tp + tn) / denominator
+            recall = tp / denominator
         class_name = classes[cls]
-        accuracy_dict[class_name] = accuracy
-    return accuracy_dict
+        recall_dict[class_name] = recall
+    return recall_dict
 
-def calculate_iou_and_accuracy(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) -> pd.DataFrame:
-    """Calculate IoU and Accuracy for each class."""
+def calculate_iou_and_recall(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) -> pd.DataFrame:
+    """Calculate IoU and Recall for each class."""
     iou_dict = calculate_iou(y_true, y_pred, classes)
-    accuracy_dict = calculate_accuracy_per_class(y_true, y_pred, classes)
-
+    recall_dict = calculate_recall_per_class(y_true, y_pred, classes)
+    
     df = pd.DataFrame({
         'Class': list(iou_dict.keys()),
         'IoU': list(iou_dict.values()),
-        'Accuracy': list(accuracy_dict.values())
+        'Recall': list(recall_dict.values())
     })
 
     df['IoU'] = df['IoU'].round(4)
-    df['Accuracy'] = df['Accuracy'].round(4)
+    df['Recall'] = df['Recall'].round(4)
 
-    # Calculate mean IoU and mean Accuracy
+    # Calculate mean IoU and mean Recall
     mean_iou = df['IoU'].mean(skipna=True)
-    mean_accuracy = df['Accuracy'].mean(skipna=True)
+    mean_recall = df['Recall'].mean(skipna=True)
+
+    # Calculate overall recall
+    overall_recall = recall_score(y_true, y_pred, average='micro', zero_division=0)
 
     # Create a new row for mean values
     mean_row = pd.DataFrame({
         'Class': ['Mean'],
         'IoU': [round(mean_iou, 4)],
-        'Accuracy': [round(mean_accuracy, 4)]
+        'Recall': [round(mean_recall, 4)]
     })
 
-    # Concatenate the mean row
-    df = pd.concat([df, mean_row], ignore_index=True)
+    # Create a row for overall recall
+    overall_row = pd.DataFrame({
+        'Class': ['Overall'],
+        'IoU': [np.nan],
+        'Recall': [round(overall_recall, 4)]
+    })
+
+    # Concatenate the mean and overall rows
+    df = pd.concat([df, mean_row, overall_row], ignore_index=True)
 
     return df
 
@@ -274,7 +273,7 @@ def create_confusion_matrix_fig(df_cm: pd.DataFrame, dataset_name: str) -> go.Fi
             fig_cm.add_annotation(
                 x=classes[j],
                 y=classes[i],
-                text=text_array[i][j],
+                text=f'{cm_normalized[i][j]*100:.1f}%',
                 showarrow=False,
                 font=dict(color='white' if cm_normalized[i][j] > 0.5 else 'black', size=12)
             )
@@ -289,16 +288,16 @@ def create_confusion_matrix_fig(df_cm: pd.DataFrame, dataset_name: str) -> go.Fi
     )
     return fig_cm
 
-def create_per_class_metrics_fig(df_clf_report: pd.DataFrame, dataset_name: str) -> go.Figure:
-    classes = df_clf_report.index[:-3]  # Exclude 'accuracy', 'macro avg', 'weighted avg'
-    precision = df_clf_report.loc[classes, 'precision']
-    recall = df_clf_report.loc[classes, 'recall']
+def create_per_class_metrics_fig(df_iou_recall: pd.DataFrame, dataset_name: str) -> go.Figure:
+    classes = df_iou_recall['Class'][:-2]  # Exclude 'Mean' and 'Overall' rows
+    iou = df_iou_recall['IoU'][:-2]
+    recall = df_iou_recall['Recall'][:-2]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name='Precision',
+        name='IoU',
         x=classes,
-        y=precision,
+        y=iou,
         marker_color='rgb(59, 130, 246)'
     ))
     fig.add_trace(go.Bar(
@@ -309,7 +308,7 @@ def create_per_class_metrics_fig(df_clf_report: pd.DataFrame, dataset_name: str)
     ))
 
     fig.update_layout(
-        title=f'Per-Class Precision and Recall - {dataset_name}',
+        title=f'Per-Class IoU and Recall - {dataset_name}',
         xaxis_title='Class',
         yaxis_title='Score',
         barmode='group',
@@ -321,11 +320,10 @@ def create_per_class_metrics_fig(df_clf_report: pd.DataFrame, dataset_name: str)
 
 def create_overall_metrics_fig(metrics: Dict[str, float], dataset_name: str) -> go.Figure:
     selected_metrics = {
-        'Accuracy': metrics['accuracy'],
-        'Balanced Accuracy': metrics['balanced_accuracy'],
+        'Overall Recall': metrics['overall_recall'],
+        'Mean Recall': metrics['mean_recall'],
         'F1 Score': metrics['f1_weighted'],
-        'Precision': metrics['precision_weighted'],
-        'Recall': metrics['recall_weighted']
+        'Precision': metrics['precision_weighted']
     }
 
     labels = list(selected_metrics.keys())
@@ -398,40 +396,10 @@ def create_combined_radar_plot(visualization_results: List[tuple]) -> go.Figure:
     )
     return fig
 
-def calculate_iou_and_accuracy(y_true: np.ndarray, y_pred: np.ndarray, classes: pd.Series) -> pd.DataFrame:
-    """Calculate IoU and Accuracy for each class."""
-    iou_dict = calculate_iou(y_true, y_pred, classes)
-    accuracy_dict = calculate_accuracy_per_class(y_true, y_pred, classes)
-
-    df = pd.DataFrame({
-        'Class': list(iou_dict.keys()),
-        'IoU': list(iou_dict.values()),
-        'Accuracy': list(accuracy_dict.values())
-    })
-
-    df['IoU'] = df['IoU'].round(4)
-    df['Accuracy'] = df['Accuracy'].round(4)
-
-    # Calculate mean IoU and mean Accuracy
-    mean_iou = df['IoU'].mean(skipna=True)
-    mean_accuracy = df['Accuracy'].mean(skipna=True)
-
-    # Create a new row for mean values
-    mean_row = pd.DataFrame({
-        'Class': ['Mean'],
-        'IoU': [round(mean_iou, 4)],
-        'Accuracy': [round(mean_accuracy, 4)]
-    })
-
-    # Concatenate the mean row
-    df = pd.concat([df, mean_row], ignore_index=True)
-
-    return df
-
 def export_metrics_html(df: pd.DataFrame, save_path: Path, title: str):
-    """Export DataFrame as an HTML table."""
+    """Export DataFrame as an HTML table with improved styling."""
     try:
-        html_table = df.to_html(index=False, classes='table table-striped', border=0)
+        html_table = df.to_html(index=False, classes='table table-striped table-bordered', border=0)
         html_content = f"""
         <html>
         <head>
@@ -440,6 +408,7 @@ def export_metrics_html(df: pd.DataFrame, save_path: Path, title: str):
             <style>
                 body {{
                     padding: 20px;
+                    background-color: #f8f9fa;
                 }}
                 h1 {{
                     text-align: center;
@@ -448,6 +417,16 @@ def export_metrics_html(df: pd.DataFrame, save_path: Path, title: str):
                 table {{
                     margin: auto;
                     width: 80%;
+                }}
+                .table-striped tbody tr:nth-of-type(odd) {{
+                    background-color: rgba(0,0,0,.05);
+                }}
+                th {{
+                    background-color: #343a40;
+                    color: white;
+                }}
+                td, th {{
+                    text-align: center;
                 }}
             </style>
         </head>
@@ -479,8 +458,8 @@ def process_file(pth_file: Path) -> Optional[Dict[str, Any]]:
         unique_labels = np.unique(np.concatenate((y_true, y_pred)))
         selected_classes = CLASS_LABELS.loc[unique_labels].dropna()
         cm_df = confusion_matrix_dataframe(y_true, y_pred, selected_classes)
+        iou_recall_df = calculate_iou_and_recall(y_true, y_pred, selected_classes)
         metrics = evaluate_hard_label_metrics(y_true, y_pred)
-        iou_accuracy_df = calculate_iou_and_accuracy(y_true, y_pred, selected_classes)
         logger.debug(f"Metrics computed for scene: {scene_id}")
         return {
             'scene_id': scene_id,
@@ -489,7 +468,7 @@ def process_file(pth_file: Path) -> Optional[Dict[str, Any]]:
             'report_df': report_df,
             'cm_df': cm_df,
             'metrics': metrics,
-            'iou_accuracy_df': iou_accuracy_df
+            'iou_recall_df': iou_recall_df
         }
     except Exception as e:
         logger.error(f"Error computing metrics for {scene_id}: {e}")
@@ -530,7 +509,6 @@ def main():
     visualization_results = []
     combined_y_true = []
     combined_y_pred = []
-    combined_iou_accuracy = []
 
     for pth_file in selected_files:
         logger.info(f"Processing: {pth_file.name}")
@@ -548,7 +526,7 @@ def main():
         logger.debug(f"Saved confusion matrix for {scene_id}")
 
         # Generate and save per-class metrics
-        fig_metrics = create_per_class_metrics_fig(result['report_df'], scene_id)
+        fig_metrics = create_per_class_metrics_fig(result['iou_recall_df'], scene_id)
         fig_metrics.write_html(save_dir / "per_class_metrics.html")
         logger.debug(f"Saved per-class metrics for {scene_id}")
 
@@ -557,22 +535,21 @@ def main():
         fig_overall.write_html(save_dir / "overall_metrics.html")
         logger.debug(f"Saved overall metrics for {scene_id}")
 
-        # Save per-category IoU and Accuracy tables
-        iou_accuracy_df = result['iou_accuracy_df']
-        csv_path = save_dir / "iou_accuracy_table.csv"
-        iou_accuracy_df.to_csv(csv_path, index=False)
-        logger.debug(f"Saved IoU and Accuracy table for {scene_id}")
+        # Save per-category IoU and Recall tables
+        iou_recall_df = result['iou_recall_df']
+        csv_path = save_dir / "iou_recall_table.csv"
+        iou_recall_df.to_csv(csv_path, index=False)
+        logger.debug(f"Saved IoU and Recall table for {scene_id}")
 
         # Export HTML table
-        html_path = save_dir / "iou_accuracy_table.html"
-        export_metrics_html(iou_accuracy_df, html_path, f"IoU and Accuracy Table - {scene_id}")
+        html_path = save_dir / "iou_recall_table.html"
+        export_metrics_html(iou_recall_df, html_path, f"IoU and Recall Table - {scene_id}")
 
         visualization_results.append((scene_id, (fig_cm, fig_metrics, fig_overall)))
 
         # Aggregate for combined metrics
         combined_y_true.append(result['y_true'])
         combined_y_pred.append(result['y_pred'])
-        combined_iou_accuracy.append(iou_accuracy_df)
 
     if visualization_results:
         # Create and save combined radar plot
@@ -584,12 +561,11 @@ def main():
         logger.info("Computing combined metrics across all scenes...")
         combined_y_true_all = np.concatenate(combined_y_true)
         combined_y_pred_all = np.concatenate(combined_y_pred)
-        combined_report_df = clf_report_func(combined_y_true_all, combined_y_pred_all)
         combined_unique_labels = np.unique(np.concatenate((combined_y_true_all, combined_y_pred_all)))
         combined_selected_classes = CLASS_LABELS.loc[combined_unique_labels].dropna()
         combined_cm_df = confusion_matrix_dataframe(combined_y_true_all, combined_y_pred_all, combined_selected_classes)
+        combined_iou_recall_df = calculate_iou_and_recall(combined_y_true_all, combined_y_pred_all, combined_selected_classes)
         combined_metrics = evaluate_hard_label_metrics(combined_y_true_all, combined_y_pred_all)
-        combined_iou_accuracy_df = calculate_iou_and_accuracy(combined_y_true_all, combined_y_pred_all, combined_selected_classes)
 
         # Save combined metrics
         combined_save_dir = output_dir / "combined_metrics"
@@ -601,7 +577,7 @@ def main():
         logger.debug("Saved combined confusion matrix.")
 
         # Generate and save per-class metrics for combined metrics
-        combined_fig_metrics = create_per_class_metrics_fig(combined_report_df, "Combined")
+        combined_fig_metrics = create_per_class_metrics_fig(combined_iou_recall_df, "Combined")
         combined_fig_metrics.write_html(combined_save_dir / "per_class_metrics.html")
         logger.debug("Saved combined per-class metrics.")
 
@@ -610,14 +586,14 @@ def main():
         combined_fig_overall.write_html(combined_save_dir / "overall_metrics.html")
         logger.debug("Saved combined overall metrics.")
 
-        # Save per-category IoU and Accuracy tables for combined metrics
-        combined_csv_path = combined_save_dir / "iou_accuracy_table.csv"
-        combined_iou_accuracy_df.to_csv(combined_csv_path, index=False)
-        logger.debug("Saved combined IoU and Accuracy table.")
+        # Save per-category IoU and Recall tables for combined metrics
+        combined_csv_path = combined_save_dir / "iou_recall_table.csv"
+        combined_iou_recall_df.to_csv(combined_csv_path, index=False)
+        logger.debug("Saved combined IoU and Recall table.")
 
         # Export combined HTML table
-        combined_html_path = combined_save_dir / "iou_accuracy_table.html"
-        export_metrics_html(combined_iou_accuracy_df, combined_html_path, "Combined IoU and Accuracy Table")
+        combined_html_path = combined_save_dir / "iou_recall_table.html"
+        export_metrics_html(combined_iou_recall_df, combined_html_path, "Combined IoU and Recall Table")
 
         # Optionally, append combined visualization to radar plot
         visualization_results.append(("Combined", (combined_fig_cm, combined_fig_metrics, combined_fig_overall)))
