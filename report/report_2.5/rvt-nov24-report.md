@@ -19,7 +19,7 @@ The sites used in each model are as follows:
 
 In *all* cases, the QH HBIM site in its entirety was used as the test scene.
 VRAM limitations on our single 4090 resulted in the QH site having to be split into 4 scenes for model inference at this 5cm resolution.
-This introduces an acceptably low amount of edge effects that could strip context around the edges of the scene, and the effects from the visualisations were generally not particularly noticeable.
+This introduces an acceptably low amount of edge effects, and no significant loss of context was observed at the boundaries of the 4 scenes.
 
 # QH HBIM Data
 Shown below is the mesh data for the QH site, demonstrating the same basic colour data as was used for the other site, making this mesh data suitable for the generation of point clouds for ingestion into Pointcept.
