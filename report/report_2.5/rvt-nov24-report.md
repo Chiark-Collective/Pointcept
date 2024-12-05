@@ -11,6 +11,16 @@ It was hypothesised that a model trained on more sites would be able to infer mo
 
 This allowed us to use one site, Queens House, as our test case, and to train models using variable numbers of the other sites to explore the ability of models trained with this framework to generalise.
 
+The sites used in each model are as follows:
+- 2 Site: Park Row, Maritime Museum
+- 3 Site: Brass Foundry, ROG North, ROG South
+- 4 Site: Park Row, Maritime Museum, ROG North, ROG South
+- 5 Site: Park Row, Maritime Museum, ROG NOrth, ROG south, Brass Foundry
+
+In *all* cases, the QH HBIM site in its entirety was used as the test scene.
+VRAM limitations on our single 4090 resulted in the QH site having to be split into 4 scenes for model inference at this 5cm resolution.
+This introduces an acceptably low amount of edge effects that could strip context around the edges of the scene, and the effects from the visualisations were generally not particularly noticeable.
+
 # QH HBIM Data
 Shown below is the mesh data for the QH site, demonstrating the same basic colour data as was used for the other site, making this mesh data suitable for the generation of point clouds for ingestion into Pointcept.
 ![QH PyVista Mesh](qh_pyvista.png)
